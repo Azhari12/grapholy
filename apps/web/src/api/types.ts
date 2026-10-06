@@ -20,6 +20,26 @@ export interface RepoConfig {
   project_key: string;
 }
 
+export interface ActiveRepo {
+  id: string;
+  owner: string;
+  name: string;
+  label: string;
+  category: string;
+  commitCount: number;
+}
+
+export interface ActiveReposResponse {
+  periode: string;
+  repos: ActiveRepo[];
+}
+
+export interface AIConfig {
+  model: string;
+  temperature: number;
+  promptTemplate: string;
+}
+
 export interface PeriodeBulan {
   mode: "bulan";
   bulan: number;

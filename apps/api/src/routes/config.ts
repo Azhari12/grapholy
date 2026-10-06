@@ -1,5 +1,7 @@
 import { Router } from "express";
+import { z } from "zod";
 import { loadProfile, loadPenanda, savePenanda } from "../services/configStore.js";
+import { loadAIConfig, saveAIConfig } from "../services/aiConfigStore.js";
 import { penandaSchema } from "../schemas/index.js";
 
 const router = Router();
@@ -16,6 +18,27 @@ router.put("/penanda", (req, res) => {
     return res.status(400).json({ error: "invalid_request", detail: parsed.error.flatten() });
   }
   savePenanda(parsed.data);
+  res.json(parsed.data);
+});
+
+// GET /api/config/ai
+router.get("/ai", (_req, res) => {
+  res.json(loadAIConfig());
+});
+
+// PUT /api/config/ai
+router.put("/ai", (req, res) => {
+  const parsed = z
+    .object({
+      model: z.string().min(1),
+      temperature: z.number().min(0).max(1),
+      promptTemplate: z.string().min(10),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "invalid_request", detail: parsed.error.flatten() });
+  }
+  saveAIConfig(parsed.data);
   res.json(parsed.data);
 });
 

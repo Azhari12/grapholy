@@ -28,4 +28,12 @@ export interface Periode {
 export interface SourceAdapter {
   readonly source: "github" | "gitlab" | "jira" | "linear";
   fetchCommits(periode: Periode, repo: RepoConfig): Promise<CommitItem[]>;
+  /** List semua repo yang adapter punya akses (PAT scope). */
+  listAccessibleRepos(): Promise<RepoConfig[]>;
+}
+
+/** Repo aktif = repo yang punya commit dalam periode tertentu. */
+export interface ActiveRepo {
+  repo: RepoConfig;
+  commitCount: number;
 }

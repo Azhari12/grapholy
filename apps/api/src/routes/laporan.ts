@@ -79,17 +79,17 @@ router.post("/generate", async (req, res) => {
   const { periode, repoIds, penanda: penandaOverride, summarizeWithLLM } = parsed.data;
   const tanggalTtd = parsed.data.tanggalTtd;
   const profile = loadProfile();
-  if (!profile) return res.status(404).json({ error: "no_profile" });
 
   const range = periodeToRange(periode);
   const penanda = penandaOverride ?? loadPenanda();
-  const groups = profile.keyword_groups ?? [];
+  const groups = profile?.keyword_groups ?? [];
 
   // 1. fetch + group per repo
   const groupedByRepo = new Map<string, Map<string, CommitItem[]>>();
   for (const repoId of repoIds) {
-    const repo = profile.repos.find((r) => `${r.owner}/${r.name}` === repoId || r.project_key === repoId);
-    if (!repo) continue;
+    const repo = profile?.repos.find((r) => `${r.owner}/${r.name}` === repoId || r.project_key === repoId)
+      // juga support repo dari list active (tidak ada di profile YAML)
+      ?? { owner: repoId.split("/")[0], name: repoId.split("/")[1], label: repoId.split("/")[1], category: repoId.split("/")[0], project_key: repoId };
     try {
       const commits = await github.fetchCommits({ since: range.since, until: range.until }, repo);
       groupedByRepo.set(repo.label, groupByKeyword(commits, repo, groups));
@@ -105,7 +105,7 @@ router.post("/generate", async (req, res) => {
     for (const [, groupsMap] of groupedByRepo) {
       for (const [groupLabel, commits] of groupsMap) {
         const subjects = commits.map((c) => c.message.split("\n")[0]);
-        tasks.push(summarizeCommits(groupLabel, subjects).then((s) => [groupLabel, s] as [string, string]));
+        tasks.push(summarizeCommits(groupLabel, subjects, range.periodeLabel).then((s) => [groupLabel, s] as [string, string]));
       }
     }
     const results = await Promise.all(tasks);

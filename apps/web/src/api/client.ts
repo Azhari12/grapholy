@@ -1,4 +1,4 @@
-import type { Penanda, PreviewResponse, RepoConfig, GenerateRequest } from "./types";
+import type { Penanda, PreviewResponse, RepoConfig, GenerateRequest, ActiveReposResponse, AIConfig } from "./types";
 
 const BASE = "/api";
 
@@ -18,12 +18,24 @@ export async function fetchRepos(): Promise<{ profile_name: string; repos: RepoC
   return jsonFetch("/repos");
 }
 
+export async function fetchActiveRepos(bulan: number, tahun: number): Promise<ActiveReposResponse> {
+  return jsonFetch(`/repos/active?bulan=${bulan}&tahun=${tahun}`);
+}
+
 export async function fetchPenanda(): Promise<Penanda> {
   return jsonFetch("/config/penanda");
 }
 
 export async function savePenanda(p: Penanda): Promise<Penanda> {
   return jsonFetch("/config/penanda", { method: "PUT", body: JSON.stringify(p) });
+}
+
+export async function fetchAIConfig(): Promise<AIConfig> {
+  return jsonFetch("/config/ai");
+}
+
+export async function saveAIConfig(c: AIConfig): Promise<AIConfig> {
+  return jsonFetch("/config/ai", { method: "PUT", body: JSON.stringify(c) });
 }
 
 export async function previewCommits(

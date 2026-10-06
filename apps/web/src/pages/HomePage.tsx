@@ -1,34 +1,54 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { PenandaForm } from "../components/PenandaForm";
 import { PeriodePicker } from "../components/PeriodePicker";
 import { RepoSelector } from "../components/RepoSelector";
 import { PreviewCommit } from "../components/PreviewCommit";
+import { AISettings } from "../components/AISettings";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
-import { fetchRepos, fetchPenanda, previewCommits, generateLaporan } from "../api/client";
-import type { Penanda, Periode, GenerateRequest } from "../api/types";
-import { FileText, Search, Loader2 } from "lucide-react";
+import { fetchActiveRepos, fetchPenanda, fetchAIConfig, previewCommits, generateLaporan } from "../api/client";
+import type { Penanda, Periode, GenerateRequest, AIConfig, ActiveRepo } from "../api/types";
+import { FileText, Search, Loader2, Sparkles } from "lucide-react";
 
 const TAHUN_NOW = new Date().getFullYear();
+const BULAN_NOW = new Date().getMonth() + 1;
 
 export function HomePage() {
   const [penanda, setPenanda] = useState<Penanda | null>(null);
+  const [aiConfig, setAIConfig] = useState<AIConfig | null>(null);
   const [periode, setPeriode] = useState<Periode>({
     mode: "bulan",
-    bulan: new Date().getMonth() + 1,
+    bulan: BULAN_NOW,
     tahun: TAHUN_NOW,
   });
   const [selected, setSelected] = useState<string[]>([]);
+  const [activeRepos, setActiveRepos] = useState<ActiveRepo[]>([]);
 
-  const reposQ = useQuery({ queryKey: ["repos"], queryFn: fetchRepos });
-  const penandaQ = useQuery({
-    queryKey: ["penanda"],
-    queryFn: fetchPenanda,
+  const penandaQ = useQuery({ queryKey: ["penanda"], queryFn: fetchPenanda });
+  const aiQ = useQuery({ queryKey: ["aiConfig"], queryFn: fetchAIConfig });
+
+  // sinkron state saat fetch selesai
+  if (penandaQ.data && !penanda) setPenanda(penandaQ.data);
+  if (aiQ.data && !aiConfig) setAIConfig(aiQ.data);
+
+  // auto-fetch repo aktif saat bulan/tahun berubah (hanya mode "bulan")
+  const activeQ = useQuery({
+    queryKey: ["activeRepos", periode.mode === "bulan" ? `${periode.bulan}-${periode.tahun}` : "custom"],
+    queryFn: () =>
+      periode.mode === "bulan"
+        ? fetchActiveRepos(periode.bulan, periode.tahun)
+        : Promise.resolve({ periode: "custom", repos: [] }),
+    staleTime: 60_000,
   });
 
-  // sinkron penanda saat fetch selesai
-  if (penandaQ.data && !penanda) setPenanda(penandaQ.data);
+  useEffect(() => {
+    if (activeQ.data) {
+      setActiveRepos(activeQ.data.repos);
+      // reset selection yang tidak ada di list baru
+      setSelected((s) => s.filter((id) => activeQ.data.repos.some((r) => r.id === id)));
+    }
+  }, [activeQ.data]);
 
   const previewM = useMutation({
     mutationFn: () => previewCommits(periode, selected),
@@ -60,11 +80,13 @@ export function HomePage() {
     generateM.mutate(req);
   };
 
-  if (reposQ.isLoading || penandaQ.isLoading) {
+  const periodeLabel =
+    periode.mode === "bulan"
+      ? activeQ.data?.periode ?? `${periode.bulan}/${periode.tahun}`
+      : "custom range";
+
+  if (penandaQ.isLoading) {
     return <div className="text-muted-foreground">Memuat konfigurasi…</div>;
-  }
-  if (reposQ.error) {
-    return <div className="text-destructive">Gagal memuat repo: {(reposQ.error as Error).message}</div>;
   }
 
   return (
@@ -78,22 +100,23 @@ export function HomePage() {
 
       {penanda && <PenandaForm penanda={penanda} onChange={setPenanda} />}
 
+      {aiConfig && <AISettings config={aiConfig} onChange={setAIConfig} />}
+
       <PeriodePicker periode={periode} onChange={setPeriode} tahunNow={TAHUN_NOW} />
 
       <RepoSelector
-        repos={reposQ.data?.repos ?? []}
+        repos={activeRepos}
         selected={selected}
         onToggle={toggle}
+        loading={activeQ.isLoading}
+        periodeLabel={periodeLabel}
       />
 
       <Card>
         <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              defaultChecked
-              className="h-4 w-4 accent-accent"
-            />
+            <input type="checkbox" defaultChecked className="h-4 w-4 accent-accent" />
+            <Sparkles className="h-4 w-4 text-accent" />
             Gunakan LLM untuk ringkasan natural
           </label>
           <div className="flex gap-2">

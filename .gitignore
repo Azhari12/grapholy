@@ -26,6 +26,7 @@ output/
 # Local config (user override — jangan commit)
 config/penanda.local.json
 config/repos.local.yaml
+config/ai.local.json
 
 # Editor
 .vscode/

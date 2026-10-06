@@ -1,22 +1,24 @@
 import { env } from "../config/env.js";
+import { loadAIConfig } from "./aiConfigStore.js";
 
 /** Panggil proxy lokal (Anthropic Messages API format) untuk ringkas commit jadi kalimat laporan.
  *
+ * Prompt template diambil dari ai.local.json (bisa di-edit via UI /api/config/ai).
  * Fallback aman: kalau LLM gagal, return empty string → classifier pakai subject list.
  */
 export async function summarizeCommits(
   groupLabel: string,
-  subjects: string[]
+  subjects: string[],
+  periodeLabel: string
 ): Promise<string> {
+  const cfg = loadAIConfig();
   if (!env.proxyUrl || !env.proxyToken) return "";
   if (subjects.length === 0) return "";
 
-  const prompt = `Ringkas commit-commit berikut menjadi 1-2 kalimat laporan formal bahasa Indonesia untuk laporan bulanan, tanpa istilah teknis berlebihan. Konteks grup: ${groupLabel}.
-
-Commit:
-${subjects.map((s, i) => `${i + 1}. ${s}`).join("\n")}
-
-Ringkasan:`;
+  const prompt = cfg.promptTemplate
+    .replace("{periode}", periodeLabel)
+    .replace("{group}", groupLabel)
+    .replace("{subjects}", subjects.map((s, i) => `${i + 1}. ${s}`).join("\n"));
 
   try {
     const res = await fetch(`${env.proxyUrl}/v1/messages`, {
@@ -27,8 +29,9 @@ Ringkasan:`;
         anthropic_version: "2023-06-01",
       },
       body: JSON.stringify({
-        model: env.llmModel,
-        max_tokens: 300,
+        model: cfg.model,
+        max_tokens: 1000,
+        temperature: cfg.temperature,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -46,3 +49,4 @@ Ringkasan:`;
     return "";
   }
 }
+
