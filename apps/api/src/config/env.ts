@@ -1,6 +1,5 @@
 import dotenv from "dotenv";
 import * as path from "node:path";
-import { pathToFileURL } from "node:url";
 
 // BE dijalankan dari apps/api/ (npm run dev) → root grapholy/ = ../../
 const ROOT_DIR = path.resolve(process.cwd(), "..", "..") + path.sep;
@@ -16,13 +15,9 @@ function required(key: string, fallback = ""): string {
 
 export const env = {
   githubPat: required("GITHUB_PAT"),
-  proxyUrl: required("PROXY_URL", "http://localhost:1930"),
-  proxyToken: required("PROXY_TOKEN"),
-  llmModel: required("LLM_MODEL", "claude-sonnet-4-5"),
   apiPort: Number(required("API_PORT", "3001")),
   pythonServiceUrl: required("PYTHON_SERVICE_URL", "http://localhost:8787"),
 };
 
 export const CONFIG_DIR = path.join(ROOT_DIR, "config") + path.sep;
 export { ROOT_DIR };
-

@@ -35,6 +35,9 @@ export interface ActiveReposResponse {
 }
 
 export interface AIConfig {
+  format: "openai" | "anthropic";
+  baseURL: string;
+  apiKey: string;
   model: string;
   temperature: number;
   promptTemplate: string;

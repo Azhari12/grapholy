@@ -30,6 +30,9 @@ router.get("/ai", (_req, res) => {
 router.put("/ai", (req, res) => {
   const parsed = z
     .object({
+      format: z.enum(["openai", "anthropic"]),
+      baseURL: z.string().url().or(z.literal("")),
+      apiKey: z.string(),
       model: z.string().min(1),
       temperature: z.number().min(0).max(1),
       promptTemplate: z.string().min(10),

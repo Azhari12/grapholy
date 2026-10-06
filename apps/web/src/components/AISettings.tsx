@@ -5,18 +5,33 @@ import { saveAIConfig } from "../api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
-import { Sparkles, Save } from "lucide-react";
+import { Sparkles, Save, Eye, EyeOff } from "lucide-react";
 
 interface Props {
   config: AIConfig | null;
   onChange: (c: AIConfig) => void;
 }
 
+const FORMAT_HELP: Record<string, { label: string; hint: string; example: string }> = {
+  anthropic: {
+    label: "Anthropic",
+    hint: "Format /v1/messages — pakai untuk Claude langsung atau proxy Anthropic-compat.",
+    example: "https://api.anthropic.com",
+  },
+  openai: {
+    label: "OpenAI-compatible",
+    hint: "Format /chat/completions — pakai untuk OpenAI, Mistral, Groq, Together, Ollama, LM Studio, dll.",
+    example: "https://api.openai.com/v1",
+  },
+};
+
 const MODELS = [
+  "claude-opus-5",
   "claude-sonnet-4-5",
-  "claude-opus-4-5",
-  "claude-haiku-4-5",
-  "claude-3-5-sonnet-20241022",
+  "gpt-4o",
+  "gpt-4o-mini",
+  "llama3.1",
+  "mistral-large-latest",
 ];
 
 const PRESETS: Record<string, string> = {
@@ -42,6 +57,7 @@ Output HANYA daftar kalimat (satu per baris untuk tabel) atau paragraf (untuk ri
 
 export function AISettings({ config, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  const [showKey, setShowKey] = useState(false);
   const saveM = useMutation({ mutationFn: saveAIConfig });
 
   const update = (k: keyof AIConfig, v: string | number) =>
@@ -52,6 +68,7 @@ export function AISettings({ config, onChange }: Props) {
   };
 
   if (!config) return null;
+  const help = FORMAT_HELP[config.format];
 
   return (
     <Card>
@@ -60,7 +77,7 @@ export function AISettings({ config, onChange }: Props) {
           <Sparkles className="h-5 w-5 text-accent" />
           <CardTitle>AI Settings</CardTitle>
           <Badge className="border-accent/30 bg-accent/10 text-accent">
-            {config.model}
+            {config.model || "belum set"}
           </Badge>
         </div>
         <button
@@ -73,21 +90,76 @@ export function AISettings({ config, onChange }: Props) {
       </CardHeader>
       {open && (
         <CardContent className="space-y-4">
+          {/* Format */}
+          <div>
+            <label className="label">Format API</label>
+            <div className="flex gap-2">
+              {(Object.keys(FORMAT_HELP) as Array<keyof typeof FORMAT_HELP>).map((f) => (
+                <button
+                  key={f}
+                  onClick={() =>
+                    onChange({ ...config, format: f as AIConfig["format"], baseURL: FORMAT_HELP[f].example })
+                  }
+                  className={`btn ${config.format === f ? "btn-primary" : "btn-secondary"}`}
+                >
+                  {FORMAT_HELP[f].label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">{help.hint}</p>
+          </div>
+
+          {/* Base URL */}
+          <div>
+            <label className="label">Base URL</label>
+            <input
+              className="input"
+              value={config.baseURL}
+              placeholder={help.example}
+              onChange={(e) => update("baseURL", e.target.value)}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Tanpa trailing slash. Contoh: <code>{help.example}</code>
+            </p>
+          </div>
+
+          {/* API Key */}
+          <div>
+            <label className="label">API Key / Token</label>
+            <div className="relative">
+              <input
+                className="input pr-10"
+                type={showKey ? "text" : "password"}
+                value={config.apiKey}
+                placeholder="sk-... / sk-ant-... / (kosong untuk Ollama)"
+                onChange={(e) => update("apiKey", e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((s) => !s)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label={showKey ? "Sembunyikan key" : "Tampilkan key"}
+              >
+                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Model + Temperature */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="label">Model</label>
-              <select
+              <input
                 className="input"
+                list="model-list"
                 value={config.model}
                 onChange={(e) => update("model", e.target.value)}
-              >
+              />
+              <datalist id="model-list">
                 {MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
+                  <option key={m} value={m} />
                 ))}
-                {!MODELS.includes(config.model) && (
-                  <option value={config.model}>{config.model} (custom)</option>
-                )}
-              </select>
+              </datalist>
             </div>
             <div>
               <label className="label">Temperature: {config.temperature.toFixed(2)}</label>
@@ -103,6 +175,7 @@ export function AISettings({ config, onChange }: Props) {
             </div>
           </div>
 
+          {/* Prompt template */}
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <label className="label mb-0">Prompt Template</label>
@@ -132,9 +205,7 @@ export function AISettings({ config, onChange }: Props) {
             <Save className="h-4 w-4" />
             {saveM.isPending ? "Menyimpan…" : "Simpan"}
           </Button>
-          {saveM.isSuccess && (
-            <span className="ml-2 text-xs text-accent">Tersimpan</span>
-          )}
+          {saveM.isSuccess && <span className="ml-2 text-xs text-accent">Tersimpan</span>}
         </CardContent>
       )}
     </Card>
