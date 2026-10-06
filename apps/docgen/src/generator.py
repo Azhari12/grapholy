@@ -51,6 +51,62 @@ def render_docx(context: dict) -> Response:
     )
 
 
+def parse_reference_doc(path_str: str) -> dict:
+    """Parse dokumen .docx referensi → struktur yang bisa dipakai AI sebagai few-shot.
+
+    Return:
+      - ringkasan_paragraf: list str (paragraf narasi per project dari BAB II)
+      - tabel_aktivitas_contoh: list {project, aktivitas} (baris tabel contoh)
+      - full_text: str (seluruh teks dokumen, untuk konteks penuh)
+    """
+    from docx import Document as DocxDocument  # type: ignore
+
+    path = Path(path_str)
+    if not path.exists():
+        raise GenerationError(f"Reference doc not found: {path}")
+
+    try:
+        doc = DocxDocument(str(path))
+    except Exception as e:
+        raise GenerationError(f"Cannot open .docx: {e}") from e
+
+    # ekstrak paragraf (ringkasan narasi)
+    ringkasan = []
+    capture = False
+    for p in doc.paragraphs:
+        t = p.text.strip()
+        if t.startswith("BAB II") or t.startswith("2."):
+            capture = True
+        if t.startswith("BAB III"):
+            capture = False
+        if capture and t and not t.startswith("BAB") and not t.startswith("Berikut"):
+            ringkasan.append(t)
+
+    # ekstrak tabel aktivitas (tabel 2 kolom, ada header "Project"/"Aktivitas")
+    tabel_contoh = []
+    for table in doc.tables:
+        if len(table.columns) != 2:
+            continue
+        header = [c.text.strip().lower() for c in table.rows[0].cells]
+        if "project" in header[0] or "aktivitas" in header[1]:
+            for row in table.rows[1:]:
+                cells = [c.text.strip() for c in row.cells]
+                if cells[0] and cells[1]:
+                    tabel_contoh.append({"project": cells[0], "aktivitas": cells[1]})
+            break
+
+    # full text untuk konteks penuh
+    full_text = "\n".join(p.text.strip() for p in doc.paragraphs if p.text.strip())
+
+    return {
+        "ringkasan_paragraf": ringkasan[:10],  # batasi biar tidak terlalu panjang
+        "tabel_aktivitas_contoh": tabel_contoh[:15],
+        "full_text": full_text[:8000],  # batasi ~8K char
+        "total_paragraf": len(ringkasan),
+        "total_tabel_rows": len(tabel_contoh),
+    }
+
+
 def _build_default_template(path: Path) -> None:
     """Create default.docx with Jinja2 placeholders + a table for aktivitas.
 

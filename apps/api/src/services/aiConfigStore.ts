@@ -5,6 +5,7 @@ import { CONFIG_DIR } from "../config/env.js";
 const AI_CONFIG_PATH = path.join(CONFIG_DIR, "ai.local.json");
 
 export type ProviderFormat = "openai" | "anthropic";
+export type GenerateMode = "default" | "with-reference-doc" | "structure-only";
 
 export interface AIConfig {
   /** Format API yang dipakai. openai = /v1/chat/completions, anthropic = /v1/messages */
@@ -16,20 +17,30 @@ export interface AIConfig {
   /** Model, mis. claude-opus-5, gpt-4o, llama3.1, dll */
   model: string;
   temperature: number;
-  /** Prompt template — pakai placeholder {subjects}, {periode}, {group}. */
+  /** Mode generate:
+   * - default: pakai promptTemplate saja (hemat token). Prompt sudah dirancang ikuti format RSUD.
+   * - with-reference-doc: baca dokumen referensi (referenceDocPath), kirim konten sebagai few-shot. Boros token (~5-8K).
+   * - structure-only: prompt struktur hemat, AI tidak baca dokumen & tidak tiru gaya spesifik. */
+  mode: GenerateMode;
+  /** Path absolut dokumen .docx referensi (untuk mode "with-reference-doc"). */
+  referenceDocPath: string;
+  /** Prompt template — pakai placeholder {subjects}, {periode}, {group}, {referenceContent}. */
   promptTemplate: string;
 }
 
-/** Default prompt — dirancang menghasilkan kalimat formal Indonesia seperti
- * format laporan RSUD (mis. "Penambahan...", "Penyempurnaan...", "Perbaikan...").
- * Lihat referensi: Laporan-Bulanan-Agustus-2026.docx */
+/** Default prompt — dirancang mengikuti format Laporan-Bulanan-Agustus-2026.docx
+ * tanpa perlu baca dokumen (hemat token). Pola kalimat di ekstrak dari dokumen:
+ * - Tabel aktivitas: "Penambahan/Penyempurnaan/Perbaikan ... (Back-End/Front-End/DevOps)"
+ * - Ringkasan: "Pada bulan {periode}, pengembangan {group} difokuskan pada ..." */
 export const DEFAULT_AI_CONFIG: AIConfig = {
   format: "anthropic",
   baseURL: "https://api.anthropic.com",
   apiKey: "",
   model: "claude-opus-5",
   temperature: 0.3,
-  promptTemplate: `Anda adalah asisten penyusun laporan bulanan formal dalam Bahasa Indonesia. Tugas: rangkas daftar commit Git berikut menjadi kalimat laporan formal yang rapi, sesuai konteks grup.
+  mode: "default",
+  referenceDocPath: "D:/Azhari/RSUD Arifin Achmad/Laporan/LAPORAN LENGKAP/Laporan-Bulanan-Agustus-2026.docx",
+  promptTemplate: `Anda adalah asisten penyusun laporan bulanan formal Bahasa Indonesia untuk laporan pengembangan sistem. Tugas: ubah daftar commit Git berikut menjadi kalimat laporan formal yang rapi.
 
 Periode laporan: {periode}
 Grup/konteks: {group}
@@ -37,14 +48,26 @@ Grup/konteks: {group}
 Daftar commit:
 {subjects}
 
-Instruksi:
-1. Untuk TABEL AKTIVITAS: ubah TIAP commit menjadi satu kalimat formal berawalan kata kerja benda (Penambahan/Penyempurnaan/Perbaikan/Implementasi/Pengembangan/Optimasi/Dokumentasi) + deskripsi singkat + kategori teknis dalam tanda kurung (Back-End/Front-End/DevOps/dll).
-2. Hilangkan prefix konvensional (feat:, fix:, refactor:, dll) dan jargon teknis berlebihan.
-3. Gunakan Bahasa Indonesia formal, bukan terjemahan harfiah.
-4. Untuk RINGKASAN PARAGRAF: gabungkan commit-commit terkait jadi 1-2 kalimat narasi mengalir (mis. "Pada bulan {periode}, pengembangan {group} difokuskan pada...").
-5. Jangan sebut nomor/sha commit. Jangan gunakan bullet point.
+Aturan format (WAJIB diikuti):
 
-Output HANYA daftar kalimat (satu per baris untuk tabel) atau paragraf (untuk ringkasan), tanpa label atau penjelasan meta.`,
+UNTUK TABEL AKTIVITAS (tiap commit = 1 baris kalimat):
+- Awali dengan kata benda aksi: "Penambahan" / "Penyempurnaan" / "Perbaikan" / "Implementasi" / "Pengembangan" / "Optimasi" / "Dokumentasi" / "Konfigurasi" / "Integrasi"
+- Lanjutkan deskripsi singkat fitur/pekerjaan (bukan terjemahan subject git mentah)
+- Akhiri dengan kategori teknis dalam tanda kurung: (Back-End) / (Front-End) / (DevOps) / (Konfigurasi) / (Integrasi) / (Database)
+- Contoh: "Penambahan opsi variabel baru dan approval gates pada manajemen template dokumen (Back-End)"
+- Contoh: "Penyempurnaan kontrol akses dokumen dan alur persetujuan dengan role-based permission (Front-End)"
+- Contoh: "Perbaikan retrieval nama dokumen: penggunaan field 'nama' sebagai pengganti 'deskripsi' pada GwDokumen (Back-End)"
+
+UNTUK RINGKASAN PARAGRAF (gabung commit terkait jadi narasi):
+- Format: "Pada bulan {periode}, pengembangan {group} difokuskan pada [kegiatan utama], serta [kegiatan sekunder]."
+- Sebut kata kunci fitur, bukan SHA/angka commit
+- 1-2 kalimat mengalir per project
+
+LARANGAN:
+- JANGAN sebut SHA commit, nomor, atau prefix git (feat:, fix:, refactor:)
+- JANGAN gunakan bullet point atau numbering
+- JANGAN tambah label "Tabel Aktivitas:" / "Ringkasan:" di output
+- Output HANYA daftar kalimat (satu per baris) — tidak ada penjelasan meta`,
 };
 
 export function loadAIConfig(): AIConfig {

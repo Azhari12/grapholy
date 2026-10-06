@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from generator import render_docx, GenerationError
+from generator import render_docx, GenerationError, parse_reference_doc
 
 app = FastAPI(title="Grapholy DocGen", version="0.1.0")
 
@@ -58,6 +58,24 @@ class GenerateRequest(BaseModel):
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "grapholy-docgen"}
+
+
+class ParseReferenceRequest(BaseModel):
+    path: str
+
+
+@app.post("/parse-reference")
+def parse_reference(req: ParseReferenceRequest):
+    """Parse dokumen .docx referensi → return struktur (ringkasan + contoh tabel)
+    untuk dipakai AI sebagai few-shot example."""
+    try:
+        result = parse_reference_doc(req.path)
+    except GenerationError as e:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "parse_failed", "detail": str(e)},
+        )
+    return result
 
 
 @app.post("/generate")

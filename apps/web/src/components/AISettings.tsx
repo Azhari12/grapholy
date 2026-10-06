@@ -95,6 +95,80 @@ export function AISettings({ config, onChange }: Props) {
       </CardHeader>
       {open && (
         <CardContent className="space-y-4">
+          {/* Mode Generate */}
+          <div>
+            <label className="label">Mode Generate</label>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <button
+                onClick={() => onChange({ ...config, mode: "default" })}
+                className={`rounded-md border p-2 text-left text-xs transition-colors ${
+                  config.mode === "default" ? "border-accent bg-accent/10" : "border-border hover:bg-muted"
+                }`}
+              >
+                <div className="font-semibold">Default</div>
+                <div className="text-muted-foreground">Hemat token (~200-500). Pakai prompt template saja.</div>
+              </button>
+              <button
+                onClick={() => onChange({ ...config, mode: "with-reference-doc" })}
+                className={`rounded-md border p-2 text-left text-xs transition-colors ${
+                  config.mode === "with-reference-doc" ? "border-accent bg-accent/10" : "border-border hover:bg-muted"
+                }`}
+              >
+                <div className="font-semibold">Baca Dokumen</div>
+                <div className="text-muted-foreground">Boros token (~5-8K). AI tiru gaya dari dokumen referensi.</div>
+              </button>
+              <button
+                onClick={() => onChange({ ...config, mode: "structure-only" })}
+                className={`rounded-md border p-2 text-left text-xs transition-colors ${
+                  config.mode === "structure-only" ? "border-accent bg-accent/10" : "border-border hover:bg-muted"
+                }`}
+              >
+                <div className="font-semibold">Struktur</div>
+                <div className="text-muted-foreground">Paling hemat (~150). Prompt struktur minimal, tanpa tiru gaya.</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Dokumen referensi (hanya relevan untuk mode with-reference-doc) */}
+          {config.mode === "with-reference-doc" && (
+            <div>
+              <label className="label">Dokumen Referensi (.docx)</label>
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  value={config.referenceDocPath}
+                  placeholder="D:/path/ke/laporan-contoh.docx"
+                  onChange={(e) => update("referenceDocPath", e.target.value)}
+                />
+                <input
+                  type="file"
+                  accept=".docx"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      // path file dari file picker — di browser cuma dapat nama,
+                      // jadi user perlu paste path manual, atau ketik
+                      update("referenceDocPath", (f as File & { path?: string }).path ?? f.name);
+                    }
+                  }}
+                  className="hidden"
+                  id="ref-doc-input"
+                />
+                <Button
+                  variant="secondary"
+                  className="h-10"
+                  onClick={() => document.getElementById("ref-doc-input")?.click()}
+                >
+                  Pilih…
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                AI akan baca dokumen ini sebagai contoh gaya. Default: Laporan-Bulanan-Agustus-2026.docx (RSUD).
+                Browser keamanan hanya kasih nama file — paste path lengkap manual kalau perlu.
+              </p>
+            </div>
+          )}
+
           {/* Format */}
           <div>
             <label className="label">Format API</label>

@@ -40,6 +40,8 @@ export interface AIConfig {
   apiKey: string;
   model: string;
   temperature: number;
+  mode: "default" | "with-reference-doc" | "structure-only";
+  referenceDocPath: string;
   promptTemplate: string;
 }
 

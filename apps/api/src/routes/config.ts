@@ -36,6 +36,8 @@ router.put("/ai", (req, res) => {
       apiKey: z.string(),
       model: z.string().min(1),
       temperature: z.number().min(0).max(1),
+      mode: z.enum(["default", "with-reference-doc", "structure-only"]),
+      referenceDocPath: z.string(),
       promptTemplate: z.string().min(10),
     })
     .safeParse(req.body);

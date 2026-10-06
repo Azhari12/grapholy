@@ -1,11 +1,14 @@
 import { loadAIConfig } from "./aiConfigStore.js";
+import { parseReferenceDoc } from "./docx.js";
 
 /** Provider-agnostic LLM client. Support dua format:
  * - openai:    POST {baseURL}/chat/completions  (header Authorization: Bearer)
  * - anthropic: POST {baseURL}/v1/messages       (header x-api-key, anthropic-version)
  *
- * baseURL dari config — user isi sendiri (mis. https://api.openai.com/v1,
- * https://api.anthropic.com, http://localhost:11434/v1 untuk Ollama).
+ * Mode generate:
+ * - default: pakai promptTemplate saja (hemat token)
+ * - with-reference-doc: baca dokumen referensi via Python, inject sebagai few-shot
+ * - structure-only: prompt struktur hemat, tanpa dokumen referensi
  *
  * Fallback aman: kalau LLM gagal, return empty string → classifier pakai subject list.
  */
@@ -15,16 +18,40 @@ export async function summarizeCommits(
   periodeLabel: string
 ): Promise<string> {
   const cfg = loadAIConfig();
-  if (!cfg.apiKey || !cfg.baseURL) {
+  if (!cfg.apiKey && !cfg.baseURL) {
     console.warn("[llm] apiKey/baseURL kosong, skipping summary");
     return "";
   }
   if (subjects.length === 0) return "";
 
-  const prompt = cfg.promptTemplate
+  // Build prompt berdasarkan mode
+  let prompt = cfg.promptTemplate
     .replace("{periode}", periodeLabel)
     .replace("{group}", groupLabel)
     .replace("{subjects}", subjects.map((s, i) => `${i + 1}. ${s}`).join("\n"));
+
+  if (cfg.mode === "with-reference-doc" && cfg.referenceDocPath) {
+    try {
+      const ref = await parseReferenceDoc(cfg.referenceDocPath);
+      const refBlock = [
+        "\n\n=== CONTOH DARI DOKUMEN REFERENSI ===",
+        "Contoh paragraf ringkasan:",
+        ...ref.ringkasan_paragraf.map((p) => `- ${p}`),
+        "",
+        "Contoh baris tabel aktivitas:",
+        ...ref.tabel_aktivitas_contoh.map(
+          (r) => `- [${r.project}] ${r.aktivitas}`
+        ),
+        "=== AKHIR CONTOH ===\n",
+        "Ikuti gaya kalimat & format dari contoh di atas. Output HANYA daftar kalimat, satu per baris.",
+      ].join("\n");
+      prompt = prompt.replace("{referenceContent}", refBlock) + refBlock;
+    } catch (e) {
+      console.warn(`[llm] parse reference failed: ${(e as Error).message}, proceed without reference`);
+    }
+  } else {
+    prompt = prompt.replace("{referenceContent}", "");
+  }
 
   try {
     const text =
