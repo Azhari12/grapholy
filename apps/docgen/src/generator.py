@@ -36,16 +36,50 @@ def ensure_template_exists(template_name: str = "default") -> Path:
 
 
 def render_docx(context: dict, template_name: str = "default") -> Response:
-    """Render the docx template with Jinja2 context → Response with bytes."""
+    """Render the docx template with Jinja2 context → Response with bytes.
+
+    Note: loop template {%tr %}/{%p %} di docxtpl 0.20.2 tidak reliable di
+    template yang kita generate programmatically (text ter-split jadi multi-run
+    sehingga regex docxtpl tidak match). Solusi: pre-join ringkasan jadi string
+    placeholder {{ ringkasan_text }}, dan isi baris tabel aktivitas MANUAL
+    setelah render, sebelum save.
+    """
     tpl_path = ensure_template_exists(template_name)
     if not tpl_path.exists():
         raise GenerationError(f"Template not found at {tpl_path}")
 
+    # Pre-process context: join ringkasan per project jadi teks paragraf
+    # dan flatten penanda ke top-level agar {{ nama }} dll. accessible di template.
+    ctx = dict(context)
+    penanda = ctx.get("penanda", {})
+    if isinstance(penanda, dict):
+        for k, v in penanda.items():
+            ctx.setdefault(k, v)
+    projects = ctx.get("ringkasan_per_project", [])
+    # ringkasan_text: gabungan paragraf (untuk placeholder sederhana)
+    ctx["ringkasan_text"] = "\n".join(f"{p['project']}: {p['ringkasan']}" for p in projects)
+    # ringkasan_bullets: text untuk List Bullet
+    ctx["ringkasan_bullets_text"] = "\n".join(f"{p['project']}: {p['ringkasan']}" for p in projects)
+
     try:
         tpl = DocxTemplate(str(tpl_path))
-        tpl.render(context)
+        tpl.render(ctx)
+        # Setelah render, isi tabel aktivitas manual (cari tabel 2-kolom dengan header Project|Aktivitas)
+        aktivitas = ctx.get("aktivitas_table", [])
+        for table in tpl.docx.tables:
+            if len(table.columns) != 2:
+                continue
+            header = [c.text.strip().lower() for c in table.rows[0].cells]
+            if "project" in header[0] or "aktivitas" in header[1]:
+                # hapus baris template (baris ke-1 jika ada), tambah baris per aktivitas
+                while len(table.rows) > 1:
+                    table._tbl.remove(table.rows[1]._tr)
+                for row_data in aktivitas:
+                    row = table.add_row()
+                    row.cells[0].text = str(row_data.get("project", ""))
+                    row.cells[1].text = str(row_data.get("aktivitas", ""))
+                break
         import io
-
         out = io.BytesIO()
         tpl.docx.save(out)
         data = out.getvalue()
@@ -258,20 +292,14 @@ def _build_rsud_template(path: Path) -> None:
     ]:
         doc.add_paragraph(t, style="List Bullet")
     doc.add_heading("1.3  Ruang Lingkup", level=2)
-    doc.add_paragraph("Laporan ini mencakup seluruh kegiatan pengembangan sistem yang dilaksanakan pada periode {{ periode }}.")
-    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
-    doc.add_paragraph("{{ p.project }}")
-    doc.add_paragraph("{%p endfor %}")
+    doc.add_paragraph("Laporan ini mencakup seluruh kegiatan pengembangan sistem yang dilaksanakan pada periode {{ periode }}, meliputi:")
+    doc.add_paragraph("{{ ringkasan_bullets_text }}")
 
     # --- BAB II RINGKASAN ---
     doc.add_heading("BAB II  RINGKASAN", level=1)
     doc.add_paragraph("Berikut adalah ringkasan kegiatan yang telah dilaksanakan selama periode {{ periode }}:")
-    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
-    p_loop = doc.add_paragraph()
-    r = p_loop.add_run("{{ p.project }}")
-    r.bold = True
-    doc.add_paragraph("{{ p.ringkasan }}")
-    doc.add_paragraph("{%p endfor %}")
+    # ringkasan per project sebagai paragraf (pre-joined, newline-separated)
+    doc.add_paragraph("{{ ringkasan_text }}")
 
     # --- BAB III LAPORAN BULANAN ---
     doc.add_heading("BAB III  LAPORAN BULANAN", level=1)
@@ -282,32 +310,22 @@ def _build_rsud_template(path: Path) -> None:
     doc.add_heading("{{ periode }}", level=2)
     doc.add_heading("Daftar Aktivitas", level=3)
 
-    # Tabel aktivitas 2 kolom (Project | Aktivitas) dengan row-cloning docxtpl
-    table = doc.add_table(rows=2, cols=2)
+    # Tabel aktivitas 2 kolom (Project | Aktivitas). Header saja — baris data
+    # diisi MANUAL oleh render_docx() setelah render (loop docxtpl tidak reliable).
+    table = doc.add_table(rows=1, cols=2)
     table.style = "Table Grid"
-    hdr = table.rows[0].cells
-    hdr[0].text = "Project"
-    hdr[1].text = "Aktivitas"
-    # baris template untuk loop — semua tag di cell pertama, konten split
-    tpl_row = table.rows[1].cells
-    tpl_row[0].text = "{%tr for row in aktivitas_table %}{{ row.project }}"
-    tpl_row[1].text = "{{ row.aktivitas }}"
-    # endfor di baris baru setelah tabel
-    end_row = table.add_row().cells
-    end_row[0].text = "{%tr endfor %}"
+    table.rows[0].cells[0].text = "Project"
+    table.rows[0].cells[1].text = "Aktivitas"
 
     doc.add_paragraph()
-    doc.add_paragraph("Rangkuman:")
-    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
-    doc.add_paragraph("{{ p.project }}: {{ p.ringkasan }}")
-    doc.add_paragraph("{%p endfor %}")
+    p_rangkuman = doc.add_paragraph()
+    p_rangkuman.add_run("Rangkuman: ").bold = True
+    p_rangkuman.add_run("{{ ringkasan_text }}")
 
     # --- BAB IV PENUTUP ---
     doc.add_heading("BAB IV  PENUTUP", level=1)
     doc.add_heading("4.1  Ringkasan", level=2)
-    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
-    doc.add_paragraph("{{ p.project }}: {{ p.ringkasan }}", style="List Bullet")
-    doc.add_paragraph("{%p endfor %}")
+    doc.add_paragraph("{{ ringkasan_bullets_text }}")
 
     # --- Tanda tangan (tabel 3x3) ---
     doc.add_paragraph()
