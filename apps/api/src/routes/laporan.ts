@@ -124,6 +124,7 @@ router.post("/generate", async (req, res) => {
       penanda,
       ringkasan_per_project,
       aktivitas_table,
+      template: (req.body as { template?: string }).template ?? "default",
     });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     res.setHeader("Content-Disposition", 'attachment; filename="laporan.docx"');

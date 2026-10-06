@@ -7,6 +7,7 @@ interface GeneratePayload {
   penanda: { nama: string; nip: string; jabatan: string; unit_kerja: string; instansi: string; nama_kepala: string; nip_kepala: string };
   ringkasan_per_project: Array<{ project: string; ringkasan: string }>;
   aktivitas_table: Array<{ no: number; project: string; aktivitas: string; status: string }>;
+  template: string;
 }
 
 /** Panggil Python docgen service via HTTP, return .docx bytes. */

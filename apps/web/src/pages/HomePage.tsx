@@ -24,6 +24,7 @@ export function HomePage() {
   });
   const [selected, setSelected] = useState<string[]>([]);
   const [activeRepos, setActiveRepos] = useState<ActiveRepo[]>([]);
+  const [template, setTemplate] = useState<"default" | "rsud">("default");
 
   const penandaQ = useQuery({ queryKey: ["penanda"], queryFn: fetchPenanda });
   const aiQ = useQuery({ queryKey: ["aiConfig"], queryFn: fetchAIConfig });
@@ -76,6 +77,7 @@ export function HomePage() {
       repoIds: selected,
       penanda,
       summarizeWithLLM: true,
+      template,
     };
     generateM.mutate(req);
   };
@@ -113,28 +115,53 @@ export function HomePage() {
       />
 
       <Card>
-        <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" defaultChecked className="h-4 w-4 accent-accent" />
-            <Sparkles className="h-4 w-4 text-accent" />
-            Gunakan LLM untuk ringkasan natural
-          </label>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => previewM.mutate()}
-              disabled={selected.length === 0 || previewM.isPending}
-            >
-              {previewM.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Preview Commit
-            </Button>
-            <Button
-              onClick={handleGenerate}
-              disabled={selected.length === 0 || generateM.isPending}
-            >
-              {generateM.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Generate .docx
-            </Button>
+        <CardContent className="space-y-4 p-6">
+          <div>
+            <label className="label">Template Dokumen</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTemplate("default")}
+                className={`btn ${template === "default" ? "btn-primary" : "btn-secondary"}`}
+              >
+                Default (generic)
+              </button>
+              <button
+                onClick={() => setTemplate("rsud")}
+                className={`btn ${template === "rsud" ? "btn-primary" : "btn-secondary"}`}
+              >
+                RSUD Arifin Achmad
+              </button>
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              {template === "rsud"
+                ? "Meniru format Laporan-Bulanan-September-2026.docx (BAB I-IV + tabel + TTD)."
+                : "Template generic sederhana (judul + ringkasan + tabel + TTD)."}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" defaultChecked className="h-4 w-4 accent-accent" />
+              <Sparkles className="h-4 w-4 text-accent" />
+              Gunakan LLM untuk ringkasan natural
+            </label>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => previewM.mutate()}
+                disabled={selected.length === 0 || previewM.isPending}
+              >
+                {previewM.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                Preview Commit
+              </Button>
+              <Button
+                onClick={handleGenerate}
+                disabled={selected.length === 0 || generateM.isPending}
+              >
+                {generateM.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                Generate .docx
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

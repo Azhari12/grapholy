@@ -51,6 +51,7 @@ class GenerateRequest(BaseModel):
     penanda: Penanda = Field(default_factory=Penanda)
     ringkasan_per_project: list[RingkasanProject] = Field(default_factory=list)
     aktivitas_table: list[AktivitasRow] = Field(default_factory=list)
+    template: str = "default"  # "default" | "rsud"
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +83,7 @@ def parse_reference(req: ParseReferenceRequest):
 def generate(req: GenerateRequest):
     """Render template .docx and return file bytes."""
     try:
-        content = render_docx(req.model_dump())
+        content = render_docx(req.model_dump(), req.template)
     except GenerationError as e:
         return JSONResponse(
             status_code=500,

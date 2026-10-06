@@ -85,4 +85,5 @@ export interface GenerateRequest {
   penanda?: Penanda;
   summarizeWithLLM?: boolean;
   tanggalTtd?: string;
+  template?: "default" | "rsud";
 }

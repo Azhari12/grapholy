@@ -1,6 +1,9 @@
 """Grapholy — .docx renderer using docxtpl (Jinja2 for docx).
 
-Template: apps/docgen/templates/default.docx
+Templates: apps/docgen/templates/
+- default.docx — generic template (placeholder sederhana)
+- rsud.docx — template RSUD Arifin Achmad (meniru Laporan-Bulanan-September-2026.docx)
+
 Placeholders: {{ nama }}, {{ nip }}, {{ periode }}, {% for row in aktivitas_table %}, {% for p in ringkasan_per_project %}, dll.
 """
 from __future__ import annotations
@@ -11,31 +14,36 @@ from docx import Document  # type: ignore
 from docxtpl import DocxTemplate  # type: ignore
 from fastapi.responses import Response
 
-TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "default.docx"
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+TEMPLATE_PATH = TEMPLATES_DIR / "default.docx"
+RSUD_TEMPLATE_PATH = TEMPLATES_DIR / "rsud.docx"
 
 
 class GenerationError(Exception):
     """Raised when template rendering fails."""
 
 
-def ensure_template_exists() -> None:
-    """Build a default template if none exists yet (idempotent)."""
-    if TEMPLATE_PATH.exists():
-        return
-    TEMPLATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _build_default_template(TEMPLATE_PATH)
-
-
-def render_docx(context: dict) -> Response:
-    """Render the docx template with Jinja2 context → Response with bytes."""
-    ensure_template_exists()
+def ensure_template_exists(template_name: str = "default") -> Path:
+    """Build a template if none exists yet (idempotent). Returns its path."""
+    if template_name == "rsud":
+        if not RSUD_TEMPLATE_PATH.exists():
+            _build_rsud_template(RSUD_TEMPLATE_PATH)
+        return RSUD_TEMPLATE_PATH
+    # default
     if not TEMPLATE_PATH.exists():
-        raise GenerationError(f"Template not found at {TEMPLATE_PATH}")
+        _build_default_template(TEMPLATE_PATH)
+    return TEMPLATE_PATH
+
+
+def render_docx(context: dict, template_name: str = "default") -> Response:
+    """Render the docx template with Jinja2 context → Response with bytes."""
+    tpl_path = ensure_template_exists(template_name)
+    if not tpl_path.exists():
+        raise GenerationError(f"Template not found at {tpl_path}")
 
     try:
-        tpl = DocxTemplate(str(TEMPLATE_PATH))
+        tpl = DocxTemplate(str(tpl_path))
         tpl.render(context)
-        buf = tpl.docx.core_properties  # touch to force render side-effects
         import io
 
         out = io.BytesIO()
@@ -152,9 +160,9 @@ def _build_default_template(path: Path) -> None:
     # --- Ringkasan per project ---
     doc.add_paragraph()
     doc.add_heading("A. Ringkasan Kegiatan", level=1)
-    doc.add_paragraph("{% for p in ringkasan_per_project %}")
+    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
     doc.add_paragraph("{{ p.project }}: {{ p.ringkasan }}")
-    doc.add_paragraph("{% endfor %}")
+    doc.add_paragraph("{%p endfor %}")
 
     # --- Tabel aktivitas ---
     doc.add_paragraph()
@@ -198,5 +206,126 @@ def _build_default_template(path: Path) -> None:
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p.add_run("NIP. {{ nip_kepala }}")
+
+    doc.save(str(path))
+
+
+def _build_rsud_template(path: Path) -> None:
+    """Create rsud.docx template — meniru struktur Laporan-Bulanan-September-2026.docx.
+
+    Struktur: Header tabel → BAB I PENDAHULUAN → BAB II RINGKASAN →
+    BAB III LAPORAN BULANAN (tabel aktivitas + rangkuman) → BAB IV PENUTUP → TTD.
+    """
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, Inches
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+
+    doc = Document()
+
+    # --- Header (tabel 1x1, meniru dokumen asli) ---
+    header_table = doc.add_table(rows=1, cols=1)
+    header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    cell = header_table.rows[0].cells[0]
+    p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run("L A P O R A N   B U L A N A N")
+    r.bold = True
+    r.font.size = Pt(14)
+    p2 = cell.add_paragraph()
+    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p2.add_run("Laporan Kegiatan Pengembangan Sistem").italic = True
+    p3 = cell.add_paragraph()
+    p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p3.add_run("Periode: {{ periode }}")
+
+    doc.add_paragraph()
+
+    # --- BAB I PENDAHULUAN ---
+    doc.add_heading("BAB I  PENDAHULUAN", level=1)
+    doc.add_heading("1.1  Latar Belakang", level=2)
+    doc.add_paragraph(
+        "Laporan ini disusun sebagai bentuk pertanggungjawaban pelaksanaan tugas "
+        "pengembangan sistem informasi pada periode {{ periode }}. Laporan ini bertujuan "
+        "untuk memberikan gambaran yang jelas mengenai kegiatan yang telah dilaksanakan, "
+        "sehingga dapat menjadi bahan evaluasi dan dokumentasi pekerjaan."
+    )
+    doc.add_heading("1.2  Tujuan", level=2)
+    for t in [
+        "Melaporkan progres kegiatan pengembangan sistem secara berkala (per bulan).",
+        "Mendokumentasikan setiap pekerjaan yang telah diselesaikan di setiap proyek.",
+        "Memberikan gambaran ringkas yang mudah dipahami mengenai hasil pekerjaan di setiap bulan.",
+    ]:
+        doc.add_paragraph(t, style="List Bullet")
+    doc.add_heading("1.3  Ruang Lingkup", level=2)
+    doc.add_paragraph("Laporan ini mencakup seluruh kegiatan pengembangan sistem yang dilaksanakan pada periode {{ periode }}.")
+    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
+    doc.add_paragraph("{{ p.project }}")
+    doc.add_paragraph("{%p endfor %}")
+
+    # --- BAB II RINGKASAN ---
+    doc.add_heading("BAB II  RINGKASAN", level=1)
+    doc.add_paragraph("Berikut adalah ringkasan kegiatan yang telah dilaksanakan selama periode {{ periode }}:")
+    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
+    p_loop = doc.add_paragraph()
+    r = p_loop.add_run("{{ p.project }}")
+    r.bold = True
+    doc.add_paragraph("{{ p.ringkasan }}")
+    doc.add_paragraph("{%p endfor %}")
+
+    # --- BAB III LAPORAN BULANAN ---
+    doc.add_heading("BAB III  LAPORAN BULANAN", level=1)
+    doc.add_paragraph(
+        "Berikut adalah rincian kegiatan yang dilaksanakan setiap bulan selama periode pelaporan. "
+        "Sesuai dengan kerangka laporan bulanan, rincian aktivitas disajikan dalam tabel berikut."
+    )
+    doc.add_heading("{{ periode }}", level=2)
+    doc.add_heading("Daftar Aktivitas", level=3)
+
+    # Tabel aktivitas 2 kolom (Project | Aktivitas) dengan row-cloning docxtpl
+    table = doc.add_table(rows=2, cols=2)
+    table.style = "Table Grid"
+    hdr = table.rows[0].cells
+    hdr[0].text = "Project"
+    hdr[1].text = "Aktivitas"
+    # baris template untuk loop — semua tag di cell pertama, konten split
+    tpl_row = table.rows[1].cells
+    tpl_row[0].text = "{%tr for row in aktivitas_table %}{{ row.project }}"
+    tpl_row[1].text = "{{ row.aktivitas }}"
+    # endfor di baris baru setelah tabel
+    end_row = table.add_row().cells
+    end_row[0].text = "{%tr endfor %}"
+
+    doc.add_paragraph()
+    doc.add_paragraph("Rangkuman:")
+    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
+    doc.add_paragraph("{{ p.project }}: {{ p.ringkasan }}")
+    doc.add_paragraph("{%p endfor %}")
+
+    # --- BAB IV PENUTUP ---
+    doc.add_heading("BAB IV  PENUTUP", level=1)
+    doc.add_heading("4.1  Ringkasan", level=2)
+    doc.add_paragraph("{%p for p in ringkasan_per_project %}")
+    doc.add_paragraph("{{ p.project }}: {{ p.ringkasan }}", style="List Bullet")
+    doc.add_paragraph("{%p endfor %}")
+
+    # --- Tanda tangan (tabel 3x3) ---
+    doc.add_paragraph()
+    ttd = doc.add_table(rows=3, cols=3)
+    ttd.alignment = WD_TABLE_ALIGNMENT.CENTER
+    # kiri atas: kepala
+    kiri = ttd.rows[0].cells[0]
+    kiri.paragraphs[0].add_run("Kepala Instalasi Electronic Data Processing\n").bold = True
+    kiri.paragraphs[0].add_run("{{ instansi }}")
+    # kanan atas: tanggal + programmer
+    kanan = ttd.rows[0].cells[2]
+    kanan.paragraphs[0].add_run("Pekanbaru, {{ tanggal_ttd }}\n").bold = True
+    kanan.paragraphs[0].add_run("PROGRAMMER")
+    # baris bawah: nama kepala (kiri) + nama programmer (kanan)
+    kiri_bawah = ttd.rows[2].cells[0]
+    kiri_bawah.paragraphs[0].add_run("{{ nama_kepala }}\n").bold = True
+    kiri_bawah.paragraphs[0].add_run("NIP. {{ nip_kepala }}")
+    kanan_bawah = ttd.rows[2].cells[2]
+    kanan_bawah.paragraphs[0].add_run("{{ nama }}").bold = True
 
     doc.save(str(path))
