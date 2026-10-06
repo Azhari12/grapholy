@@ -1,10 +1,12 @@
 """Grapholy — .docx renderer using docxtpl (Jinja2 for docx).
 
 Templates: apps/docgen/templates/
-- default.docx — generic template (placeholder sederhana)
-- rsud.docx — template RSUD Arifin Achmad (meniru Laporan-Bulanan-September-2026.docx)
+- default.docx — generic template (auto-generated if absent)
+- rsud.docx — template RSUD Arifin Achmad (STATIC FILE, edit langsung di Word;
+  tidak auto-generate agar edit user tidak tertimpa. Build manual via
+  _build_rsud_template() kalau perlu re-create dari awal.)
 
-Placeholders: {{ nama }}, {{ nip }}, {{ periode }}, {% for row in aktivitas_table %}, {% for p in ringkasan_per_project %}, dll.
+Placeholders: {{ nama }}, {{ nip }}, {{ periode }}, {{ latarBelakang }}, dll.
 """
 from __future__ import annotations
 
@@ -24,10 +26,16 @@ class GenerationError(Exception):
 
 
 def ensure_template_exists(template_name: str = "default") -> Path:
-    """Build a template if none exists yet (idempotent). Returns its path."""
+    """Return path to template. rsud.docx is STATIC (not auto-generated) — user
+    may edit it directly in Word without fear of being overwritten. If missing,
+    raise clear error. default.docx still auto-generates if absent."""
     if template_name == "rsud":
         if not RSUD_TEMPLATE_PATH.exists():
-            _build_rsud_template(RSUD_TEMPLATE_PATH)
+            raise GenerationError(
+                f"Template rsud.docx not found at {RSUD_TEMPLATE_PATH}. "
+                "This is a static file — restore it from git or rebuild manually "
+                "via _build_rsud_template()."
+            )
         return RSUD_TEMPLATE_PATH
     # default
     if not TEMPLATE_PATH.exists():
