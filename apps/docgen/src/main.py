@@ -23,7 +23,6 @@ app = FastAPI(title="Grapholy DocGen", version="0.1.0")
 # ---------------------------------------------------------------------------
 
 class AktivitasRow(BaseModel):
-    no: int
     project: str
     aktivitas: str
     status: str = "Selesai"
@@ -31,7 +30,10 @@ class AktivitasRow(BaseModel):
 
 class RingkasanProject(BaseModel):
     project: str
-    ringkasan: str
+    narasi: str = ""
+    fitur: str = ""
+    perbaikan: str = ""
+    ringkasan: str = ""
 
 
 class Penanda(BaseModel):
@@ -45,13 +47,19 @@ class Penanda(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    periode: str  # e.g. "September 2026"
-    tahun: str  # e.g. "2026"
-    tanggal_ttd: str  # e.g. "30 September 2026"
+    periode: str
+    tahun: str
+    tanggal_ttd: str
     penanda: Penanda = Field(default_factory=Penanda)
+    # JSON terstruktur dari AI (template RSUD)
+    latar_belakang: str = ""
+    ruang_lingkup: list[str] = Field(default_factory=list)
     ringkasan_per_project: list[RingkasanProject] = Field(default_factory=list)
+    aktivitas: list[AktivitasRow] = Field(default_factory=list)
+    ringkasan_penutup: list[str] = Field(default_factory=list)
+    # backward-compat (template default)
     aktivitas_table: list[AktivitasRow] = Field(default_factory=list)
-    template: str = "default"  # "default" | "rsud"
+    template: str = "default"
 
 
 # ---------------------------------------------------------------------------

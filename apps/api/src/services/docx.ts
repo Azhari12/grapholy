@@ -5,9 +5,15 @@ interface GeneratePayload {
   tahun: string;
   tanggal_ttd: string;
   penanda: { nama: string; nip: string; jabatan: string; unit_kerja: string; instansi: string; nama_kepala: string; nip_kepala: string };
-  ringkasan_per_project: Array<{ project: string; ringkasan: string }>;
-  aktivitas_table: Array<{ no: number; project: string; aktivitas: string; status: string }>;
   template: string;
+  // template default (lama) — ringkasan_per_project bisa berbagai shape (Python validasi)
+  ringkasan_per_project?: unknown[];
+  aktivitas_table?: Array<{ no: number; project: string; aktivitas: string; status: string }>;
+  // template RSUD (JSON terstruktur dari AI)
+  latar_belakang?: string;
+  ruang_lingkup?: string[];
+  aktivitas?: Array<{ project: string; aktivitas: string }>;
+  ringkasan_penutup?: string[];
 }
 
 /** Panggil Python docgen service via HTTP, return .docx bytes. */

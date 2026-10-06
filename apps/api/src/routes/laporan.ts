@@ -4,7 +4,7 @@ import { GithubAdapter } from "../adapters/githubAdapter.js";
 import type { CommitItem } from "../adapters/sourceAdapter.js";
 import { loadProfile, loadPenanda } from "../services/configStore.js";
 import { groupByKeyword, buildAktivitasRows, buildRingkasanPerProject } from "../services/classifier.js";
-import { summarizeCommits } from "../services/llm.js";
+import { summarizeCommits, generateStructuredContent } from "../services/llm.js";
 import { generateDocx } from "../services/docx.js";
 import { generateRequestSchema, previewRequestSchema, periodeSchema } from "../schemas/index.js";
 
@@ -38,6 +38,31 @@ function periodeToRange(p: Periode) {
     periodeLabel: `${start.toLocaleDateString("id-ID")} - ${end.toLocaleDateString("id-ID")}`,
     tahunLabel: String(start.getFullYear()),
     tanggalTtdDefault: end.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }),
+  };
+}
+
+/** Fallback structured content tanpa AI (dipakai saat summarizeWithLLM=false). */
+function fallbackStructured(
+  groupedCommits: Map<string, string[]>,
+  periodeLabel: string
+) {
+  const projects = Array.from(groupedCommits.keys());
+  return {
+    latar_belakang: `Laporan ini disusun sebagai bentuk pertanggungjawaban pelaksanaan tugas pengembangan sistem informasi pada periode ${periodeLabel}. Pekerjaan dilakukan pada proyek ${projects.join(", ")}.`,
+    ruang_lingkup: projects.map((p) => `${p} — mencakup kegiatan pengembangan pada periode ${periodeLabel}.`),
+    ringkasan_per_project: projects.map((p) => ({
+      project: p,
+      narasi: `Pada bulan ${periodeLabel}, pengembangan ${p} dilakukan.`,
+      fitur: "",
+      perbaikan: "",
+    })),
+    aktivitas: Array.from(groupedCommits.entries()).flatMap(([project, subjects]) =>
+      subjects.map((s) => ({
+        project,
+        aktivitas: s.replace(/^\w+(\(.+\))?:\s*/, ""),
+      }))
+    ),
+    ringkasan_penutup: projects.map((p) => `${p}: kegiatan pengembangan periode ${periodeLabel}.`),
   };
 }
 
@@ -112,23 +137,59 @@ router.post("/generate", async (req, res) => {
     for (const [label, s] of results) if (s) summaries.set(label, s);
   }
 
-  // 3. build structured payload + call Python docgen
-  const ringkasan_per_project = buildRingkasanPerProject(groupedByRepo, summaries);
-  const aktivitas_table = buildAktivitasRows(groupedByRepo, summaries);
+  const template = (req.body as { template?: string }).template ?? "default";
 
   try {
-    const docx = await generateDocx({
-      periode: range.periodeLabel,
-      tahun: range.tahunLabel,
-      tanggal_ttd: tanggalTtd ?? range.tanggalTtdDefault,
-      penanda,
-      ringkasan_per_project,
-      aktivitas_table,
-      template: (req.body as { template?: string }).template ?? "default",
-    });
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    res.setHeader("Content-Disposition", 'attachment; filename="laporan.docx"');
-    res.send(docx);
+    if (template === "rsud") {
+      // Mode RSUD: AI generate JSON terstruktur, kirim ke Python untuk di-tempel ke template
+      // Kumpulkan semua commit subjects per repo (untuk dikirim ke AI)
+      const groupedCommits = new Map<string, string[]>();
+      for (const [repoLabel, groupsMap] of groupedByRepo) {
+        const allSubjects: string[] = [];
+        for (const [, commits] of groupsMap) {
+          allSubjects.push(...commits.map((c) => c.message.split("\n")[0]));
+        }
+        groupedCommits.set(repoLabel, allSubjects);
+      }
+
+      const content = summarizeWithLLM
+        ? await generateStructuredContent(groupedCommits, range.periodeLabel)
+        : fallbackStructured(groupedCommits, range.periodeLabel);
+
+      const docx = await generateDocx({
+        periode: range.periodeLabel,
+        tahun: range.tahunLabel,
+        tanggal_ttd: tanggalTtd ?? range.tanggalTtdDefault,
+        penanda,
+        template,
+        latar_belakang: content.latar_belakang,
+        ruang_lingkup: content.ruang_lingkup,
+        ringkasan_per_project: content.ringkasan_per_project.map(
+          (p) => ({ ...p } as Record<string, string>)
+        ),
+        aktivitas: content.aktivitas,
+        ringkasan_penutup: content.ringkasan_penutup,
+      });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", 'attachment; filename="laporan.docx"');
+      res.send(docx);
+    } else {
+      // Mode default (template lama): summarize per group
+      const ringkasan_per_project = buildRingkasanPerProject(groupedByRepo, summaries);
+      const aktivitas_table = buildAktivitasRows(groupedByRepo, summaries);
+      const docx = await generateDocx({
+        periode: range.periodeLabel,
+        tahun: range.tahunLabel,
+        tanggal_ttd: tanggalTtd ?? range.tanggalTtdDefault,
+        penanda,
+        ringkasan_per_project,
+        aktivitas_table,
+        template,
+      });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      res.setHeader("Content-Disposition", 'attachment; filename="laporan.docx"');
+      res.send(docx);
+    }
   } catch (e) {
     res.status(500).json({ error: "docx_generation_failed", detail: (e as Error).message });
   }
