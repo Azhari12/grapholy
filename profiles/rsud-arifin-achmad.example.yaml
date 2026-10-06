@@ -1,0 +1,48 @@
+# Profile contoh — Grapholy
+# Salin ke config/repos.local.yaml & config/penanda.local.json, lalu custom.
+# Aplikasi generic; profile ini hanya contoh (tidak wajib dipakai).
+
+profile:
+  name: "RSUD Arifin Achmad — Tim Pengembangan Sistem"
+  description: "Contoh profile untuk laporan bulanan pengembangan SIMDOK/MIRAI"
+
+repos:
+  - owner: EDP-RSUD-Arifin-Achmad
+    name: simdok-fe
+    label: "SIMDOK (Front-End)"
+    category: "SIMDOK"
+    project_key: "SIMDOK-FE"
+  - owner: EDP-RSUD-Arifin-Achmad
+    name: simdok-be
+    label: "SIMDOK (Back-End)"
+    category: "SIMDOK"
+    project_key: "SIMDOK-BE"
+  - owner: edprsudaa
+    name: api-rme
+    label: "TTE Gateway (api-rme)"
+    category: "TTE Gateway"
+    project_key: "TTE Gateway"
+  - owner: edprsudaa
+    name: api-mirai-pasien
+    label: "MIRAI Pasien (Back-End)"
+    category: "MIRAI Pasien"
+    project_key: "MIRAI Pasien"
+  - owner: edprsudaa
+    name: mirai-pasien
+    label: "MIRAI Pasien (Mobile)"
+    category: "MIRAI Pasien"
+    project_key: "MIRAI Pasien"
+
+# Keyword clustering opsional (grouping commit per fitur)
+keyword_groups:
+  - group: "Alur Persetujuan & TTE"
+    keywords: ["approval", "signer", "unlock", "tte"]
+  - group: "Modul Radiologi"
+    keywords: ["radiologi", "myvue", "viewer"]
+  - group: "Booking BPJS Antrol"
+    keywords: ["booking", "antrol", "check-in", "antrean"]
+
+penanda_default:
+  instansi: "RSUD Arifin Achmad"
+  nama_kepala: "FAUZI, A.Md"
+  nip_kepala: ""

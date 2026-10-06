@@ -1,0 +1,64 @@
+{
+  "folders": [
+    { "path": "apps/web", "name": "🌐 Web (React + Vite)" },
+    { "path": "apps/api", "name": "⚙️ API (Express + TS)" },
+    { "path": "apps/docgen", "name": "🐍 DocGen (Python + FastAPI)" },
+    { "path": "profiles", "name": "📁 Profiles" },
+    { "path": "config", "name": "⚙️ Local Config" },
+    { "path": "docs", "name": "📚 Docs" },
+    { "path": ".", "name": "🏠 Grapholy (root)" }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/__pycache__": true,
+      "**/.venv": true,
+      "**/dist": true
+    },
+    "search.exclude": {
+      "**/node_modules": true,
+      "**/dist": true,
+      "**/__pycache__": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "ms-python.python",
+      "ms-python.black-formatter",
+      "bradlc.vscode-tailwindcss"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Start API (Express)",
+        "type": "shell",
+        "command": "npm run dev",
+        "options": { "cwd": "apps/api" },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Start Web (Vite)",
+        "type": "shell",
+        "command": "npm run dev",
+        "options": { "cwd": "apps/web" },
+        "isBackground": true,
+        "problemMatcher": []
+      },
+      {
+        "label": "Start DocGen (FastAPI)",
+        "type": "shell",
+        "command": "uvicorn main:app --reload --port 8787",
+        "options": { "cwd": "apps/docgen/src" },
+        "isBackground": true,
+        "problemMatcher": []
+      }
+    ]
+  }
+}
