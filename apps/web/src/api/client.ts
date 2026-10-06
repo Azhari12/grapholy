@@ -38,6 +38,19 @@ export async function saveAIConfig(c: AIConfig): Promise<AIConfig> {
   return jsonFetch("/config/ai", { method: "PUT", body: JSON.stringify(c) });
 }
 
+export interface AITestResult {
+  ok: boolean;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  response: string;
+  error?: string;
+}
+
+export async function testAIConnection(): Promise<AITestResult> {
+  return jsonFetch("/config/ai/test", { method: "POST" });
+}
+
 export async function previewCommits(
   periode: GenerateRequest["periode"],
   repoIds: string[]

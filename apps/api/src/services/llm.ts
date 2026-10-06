@@ -88,3 +88,54 @@ async function callAnthropic(cfg: Awaited<ReturnType<typeof loadAIConfig>>, prom
   };
   return data.content?.find((c) => c.type === "text")?.text ?? "";
 }
+
+/** Test koneksi LLM — kirim prompt singkat, return status + response + metadata.
+ * Dipakai endpoint /api/config/ai/test untuk verifikasi config AI sebelum generate. */
+export async function testLLMConnection(): Promise<{
+  ok: boolean;
+  provider: string;
+  model: string;
+  latencyMs: number;
+  response: string;
+  error?: string;
+}> {
+  const cfg = loadAIConfig();
+  const start = Date.now();
+
+  if (!cfg.baseURL) {
+    return { ok: false, provider: cfg.format, model: cfg.model, latencyMs: 0, response: "", error: "baseURL kosong" };
+  }
+  if (!cfg.apiKey && cfg.format === "anthropic") {
+    return { ok: false, provider: cfg.format, model: cfg.model, latencyMs: 0, response: "", error: "apiKey kosong (Anthropic butuh API key)" };
+  }
+  // Ollama/local boleh tanpa key, jadi tidak block apiKey kosong untuk openai
+
+  const testPrompt = "Balas dengan tepat satu kalimat: 'Koneksi AI Grapholy berhasil.' Jangan tambah apa-apa.";
+
+  try {
+    const text =
+      cfg.format === "anthropic"
+        ? await callAnthropic(cfg, testPrompt)
+        : await callOpenAI(cfg, testPrompt);
+    const latencyMs = Date.now() - start;
+    if (!text.trim()) {
+      return { ok: false, provider: cfg.format, model: cfg.model, latencyMs, response: "", error: "Response kosong" };
+    }
+    return {
+      ok: true,
+      provider: cfg.format,
+      model: cfg.model,
+      latencyMs,
+      response: text.trim(),
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      provider: cfg.format,
+      model: cfg.model,
+      latencyMs: Date.now() - start,
+      response: "",
+      error: (e as Error).message,
+    };
+  }
+}

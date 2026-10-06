@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { loadProfile, loadPenanda, savePenanda } from "../services/configStore.js";
 import { loadAIConfig, saveAIConfig } from "../services/aiConfigStore.js";
+import { testLLMConnection } from "../services/llm.js";
 import { penandaSchema } from "../schemas/index.js";
 
 const router = Router();
@@ -50,6 +51,12 @@ router.get("/profile", (_req, res) => {
   const profile = loadProfile();
   if (!profile) return res.status(404).json({ error: "no_profile" });
   res.json(profile);
+});
+
+// POST /api/config/ai/test — test koneksi LLM dengan prompt singkat
+router.post("/ai/test", async (_req, res) => {
+  const result = await testLLMConnection();
+  res.json(result);
 });
 
 export default router;

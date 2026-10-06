@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { AIConfig } from "../api/types";
-import { saveAIConfig } from "../api/client";
+import { saveAIConfig, testAIConnection, type AITestResult } from "../api/client";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { Button } from "./ui/Button";
 import { Badge } from "./ui/Badge";
-import { Sparkles, Save, Eye, EyeOff } from "lucide-react";
+import { Sparkles, Save, Eye, EyeOff, Zap, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 interface Props {
   config: AIConfig | null;
@@ -58,7 +58,12 @@ Output HANYA daftar kalimat (satu per baris untuk tabel) atau paragraf (untuk ri
 export function AISettings({ config, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [testResult, setTestResult] = useState<AITestResult | null>(null);
   const saveM = useMutation({ mutationFn: saveAIConfig });
+  const testM = useMutation({
+    mutationFn: testAIConnection,
+    onSuccess: setTestResult,
+  });
 
   const update = (k: keyof AIConfig, v: string | number) =>
     onChange({ ...config!, [k]: v });
@@ -198,6 +203,60 @@ export function AISettings({ config, onChange }: Props) {
             />
             <p className="mt-1 text-xs text-muted-foreground">
               Placeholder: <code>{"{periode}"}</code>, <code>{"{group}"}</code>, <code>{"{subjects}"}</code>
+            </p>
+          </div>
+
+          {/* Test connection */}
+          <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-accent" />
+                <span className="text-sm font-medium">Test Koneksi AI</span>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => testM.mutate()}
+                disabled={testM.isPending}
+                className="h-8 px-3"
+              >
+                {testM.isPending ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Testing…</>
+                ) : (
+                  <><Zap className="h-3.5 w-3.5" /> Test</>
+                )}
+              </Button>
+            </div>
+            {testResult && (
+              <div
+                className={`rounded border p-2 text-xs animate-fade-in ${
+                  testResult.ok
+                    ? "border-accent/40 bg-accent/10 text-accent"
+                    : "border-destructive/40 bg-destructive/10 text-destructive"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-semibold">
+                  {testResult.ok ? (
+                    <><CheckCircle2 className="h-3.5 w-3.5" /> Berhasil</>
+                  ) : (
+                    <><XCircle className="h-3.5 w-3.5" /> Gagal</>
+                  )}
+                  <span className="font-mono opacity-80">
+                    {testResult.provider} · {testResult.model} · {testResult.latencyMs}ms
+                  </span>
+                </div>
+                {testResult.ok ? (
+                  <div className="mt-1 font-mono text-[11px] opacity-90">
+                    {testResult.response}
+                  </div>
+                ) : (
+                  <div className="mt-1 font-mono text-[11px] opacity-90">
+                    {testResult.error}
+                  </div>
+                )}
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground">
+              Simpan config dulu sebelum Test agar pakai nilai terbaru.
             </p>
           </div>
 
