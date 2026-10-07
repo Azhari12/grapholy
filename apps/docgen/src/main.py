@@ -56,6 +56,7 @@ class GenerateRequest(BaseModel):
     ruang_lingkup: list[str] = Field(default_factory=list)
     ringkasan_per_project: list[RingkasanProject] = Field(default_factory=list)
     aktivitas: list[AktivitasRow] = Field(default_factory=list)
+    rangkuman_narasi: str = ""
     ringkasan_penutup: list[str] = Field(default_factory=list)
     # backward-compat (template default)
     aktivitas_table: list[AktivitasRow] = Field(default_factory=list)

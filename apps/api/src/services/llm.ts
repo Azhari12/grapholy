@@ -12,6 +12,9 @@ export interface StructuredContent {
     perbaikan: string;
   }>;
   aktivitas: Array<{ project: string; aktivitas: string }>;
+  /** RANGKUMAN BAB III: 1 paragraf narasi mengalir (gabungan semua aktivitas). */
+  rangkuman_narasi: string;
+  /** RINGKASAN BAB IV: bullet per proyek (ringkas). */
   ringkasan_penutup: string[];
 }
 
@@ -27,7 +30,8 @@ Aturan konten (WAJIB):
 - ruang_lingkup: array string, 1 bullet per proyek, format "Nama Proyek — mencakup [kegiatan]".
 - ringkasan_per_project: array, 1 objek per proyek. narasi = "Pada bulan {periode}, pengembangan {project} difokuskan pada [kegiatan utama]". fitur = "Fitur yang diselesaikan: [daftar fitur]". perbaikan = "Perbaikan teknis: [daftar perbaikan]".
 - aktivitas: array, 1 objek per commit. aktivitas = kalimat formal berawalan "Penambahan/Penyempurnaan/Perbaikan/Implementasi/Pengembangan" + deskripsi + kategori teknis dalam kurung (Back-End)/(Front-End)/(DevOps).
-- ringkasan_penutup: array, 1 bullet per proyek, format "{project}: [ringkasan singkat]".
+- rangkuman_narasi: 1 PARAGRAF NARASI MENGALIR untuk BAB III (Rangkuman), dimulai "Pada bulan {periode}...". Gabungkan semua aktivitas semua proyek jadi 1 paragraf panjang yang mengalir (bukan bullet, bukan list).
+- ringkasan_penutup: array, 1 bullet per proyek untuk BAB IV (Ringkasan Penutup), format "{project}: [ringkasan singkat]".
 
 Return JSON dengan struktur persis:
 {
@@ -39,6 +43,7 @@ Return JSON dengan struktur persis:
   "aktivitas": [
     {"project": "...", "aktivitas": "..."}
   ],
+  "rangkuman_narasi": "...",
   "ringkasan_penutup": ["...", "..."]
 }`;
 
@@ -127,6 +132,7 @@ function parseStructuredJson(
         ? parsed.ringkasan_per_project
         : [],
       aktivitas: Array.isArray(parsed.aktivitas) ? parsed.aktivitas : [],
+      rangkuman_narasi: parsed.rangkuman_narasi ?? "",
       ringkasan_penutup: Array.isArray(parsed.ringkasan_penutup)
         ? parsed.ringkasan_penutup
         : [],
@@ -158,6 +164,7 @@ function fallbackContent(
         aktivitas: s.replace(/^\w+(\(.+\))?:\s*/, ""),
       }))
     ),
+    rangkuman_narasi: `Pada bulan ${periodeLabel}, telah dilaksanakan kegiatan pengembangan sistem informasi pada proyek ${projects.join(", ")}.`,
     ringkasan_penutup: projects.map((p) => `${p}: kegiatan pengembangan periode ${periodeLabel}.`),
   };
 }

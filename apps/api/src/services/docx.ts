@@ -13,6 +13,7 @@ interface GeneratePayload {
   latar_belakang?: string;
   ruang_lingkup?: string[];
   aktivitas?: Array<{ project: string; aktivitas: string }>;
+  rangkuman_narasi?: string;
   ringkasan_penutup?: string[];
 }
 

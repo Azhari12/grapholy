@@ -63,6 +63,7 @@ function fallbackStructured(
       }))
     ),
     ringkasan_penutup: projects.map((p) => `${p}: kegiatan pengembangan periode ${periodeLabel}.`),
+    rangkuman_narasi: `Pada bulan ${periodeLabel}, telah dilaksanakan kegiatan pengembangan sistem informasi pada proyek ${projects.join(", ")}.`,
   };
 }
 
@@ -168,6 +169,7 @@ router.post("/generate", async (req, res) => {
           (p) => ({ ...p } as Record<string, string>)
         ),
         aktivitas: content.aktivitas,
+        rangkuman_narasi: content.rangkuman_narasi,
         ringkasan_penutup: content.ringkasan_penutup,
       });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");

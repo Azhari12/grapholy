@@ -68,15 +68,29 @@ def render_docx(context: dict, template_name: str = "default") -> Response:
     if isinstance(penanda, dict):
         for k, v in penanda.items():
             ctx.setdefault(k, v)
-    # ringkasan_narasi: gabungan narasi per project untuk placeholder Rangkuman
+    # RANGKUMAN BAB III: 1 paragraf narasi. Prioritaskan rangkuman_narasi dari AI
+    # (AI generate paragraf utuh). Kalau kosong, fallback gabungan narasi per project.
     projects = ctx.get("ringkasan_per_project", [])
-    narrations = []
-    for p in projects:
-        if isinstance(p, dict):
-            n = p.get("narasi") or p.get("ringkasan", "")
-            if n:
-                narrations.append(n)
-    ctx["rangkasanNarasi"] = " ".join(narrations)
+    if ctx.get("rangkuman_narasi"):
+        ctx["rangkumanNarasi"] = ctx["rangkuman_narasi"]
+    else:
+        narrations = []
+        for p in projects:
+            if isinstance(p, dict):
+                n = p.get("narasi") or p.get("ringkasan", "")
+                if n:
+                    narrations.append(n)
+        ctx["rangkumanNarasi"] = " ".join(narrations)
+    # ringkasanPenutupPembuka: paragraf pembuka BAB IV (sebelum bullet)
+    periode = ctx.get("periode", "")
+    project_names = [
+        p.get("project", "") for p in projects if isinstance(p, dict) and p.get("project")
+    ]
+    ctx["ringkasanPenutupPembuka"] = (
+        f"Selama periode {periode}, telah dilaksanakan kegiatan pengembangan "
+        f"sistem informasi pada proyek {', '.join(project_names)}. "
+        f"Berikut adalah ringkasan pekerjaan yang telah diselesaikan:"
+    )
     # alias: latarBelakang dari latar_belakang
     if "latar_belakang" in ctx:
         ctx["latarBelakang"] = ctx["latar_belakang"]
@@ -173,10 +187,17 @@ def _fill_ringkasan_per_project(docx, projects: list) -> None:
 
 
 def _fill_ringkasan_penutup(docx, items: list) -> None:
-    """Isi BAB IV 4.1 Ringkasan: bullet per proyek. Sisipkan setelah heading '4.1 Ringkasan'."""
+    """Isi BAB IV 4.1 Ringkasan: bullet per proyek. Sisipkan setelah paragraf
+    pembuka ('telah dilaksanakan ... Berikut adalah ringkasan')."""
     if not items:
         return
-    idx = _find_paragraph_index(docx, lambda t: "4.1" in t and "ringkasan" in t.lower())
+    # cari paragraf pembuka (anchor untuk bullet)
+    idx = _find_paragraph_index(
+        docx, lambda t: "berikut adalah ringkasan pekerjaan" in t.lower()
+    )
+    if idx < 0:
+        # fallback: cari heading 4.1
+        idx = _find_paragraph_index(docx, lambda t: "4.1" in t and "ringkasan" in t.lower())
     if idx < 0:
         return
     anchor = docx.paragraphs[idx]
@@ -423,15 +444,17 @@ def _build_rsud_template(path: Path) -> None:
     table.rows[0].cells[1].text = "Aktivitas"
 
     doc.add_paragraph()
-    p_rangkuman = doc.add_paragraph()
-    p_rangkuman.add_run("Rangkuman: ").bold = True
-    p_rangkuman.add_run("{{ rangkasanNarasi }}")
+    # Rangkuman: 1 paragraf narasi. Gabung label+placeholder di 1 run agar
+    # DocxTemplate render dengan benar (placeholder di run kedua tidak ter-render).
+    doc.add_paragraph("Rangkuman: {{ rangkumanNarasi }}")
 
     # --- BAB IV PENUTUP ---
     doc.add_heading("BAB IV  PENUTUP", level=1)
     doc.add_heading("4.1  Ringkasan", level=2)
-    # bullet per proyek diisi manual oleh _fill_ringkasan_penutup
-    doc.add_paragraph("{{ rangkasanNarasi }}")
+    # Paragraf pembuka + bullet per proyek diisi MANUAL oleh _fill_ringkasan_penutup.
+    # Anchor: heading "4.1  Ringkasan" — _fill_ringkasan_penutup cari ini lalu
+    # sisipkan paragraf pembuka + bullet setelahnya.
+    doc.add_paragraph("{{ ringkasanPenutupPembuka }}")
 
     # --- Tanda tangan (tabel 3x3) ---
     doc.add_paragraph()
