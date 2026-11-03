@@ -38,6 +38,32 @@ export async function saveAIConfig(c: AIConfig): Promise<AIConfig> {
   return jsonFetch("/config/ai", { method: "PUT", body: JSON.stringify(c) });
 }
 
+export interface GithubStatus {
+  hasPat: boolean;
+  source: "ui" | "env" | "none";
+  masked: string;
+}
+
+export async function fetchGithubStatus(): Promise<GithubStatus> {
+  return jsonFetch("/config/github");
+}
+
+export async function saveGithubPat(pat: string): Promise<{ ok: boolean }> {
+  return jsonFetch("/config/github", { method: "PUT", body: JSON.stringify({ pat }) });
+}
+
+export interface GithubTestResult {
+  ok: boolean;
+  login?: string;
+  name?: string;
+  status?: number;
+  error?: string;
+}
+
+export async function testGithubPat(): Promise<GithubTestResult> {
+  return jsonFetch("/config/github/test", { method: "POST" });
+}
+
 export interface AITestResult {
   ok: boolean;
   provider: string;
@@ -61,7 +87,13 @@ export async function previewCommits(
   });
 }
 
-export async function generateLaporan(req: GenerateRequest): Promise<Blob> {
+export interface GenerateResult {
+  blob: Blob;
+  aiStatus: "ai" | "fallback" | "unknown";
+  aiError?: string;
+}
+
+export async function generateLaporan(req: GenerateRequest): Promise<GenerateResult> {
   const res = await fetch(`${BASE}/laporan/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -71,5 +103,11 @@ export async function generateLaporan(req: GenerateRequest): Promise<Blob> {
     const body = await res.text().catch(() => "");
     throw new Error(`${res.status}: ${body.slice(0, 200)}`);
   }
-  return res.blob();
+  const aiStatus = (res.headers.get("X-AI-Status") as "ai" | "fallback" | null) ?? "unknown";
+  const aiErrorHeader = res.headers.get("X-AI-Error");
+  return {
+    blob: await res.blob(),
+    aiStatus,
+    aiError: aiErrorHeader ? decodeURIComponent(aiErrorHeader) : undefined,
+  };
 }

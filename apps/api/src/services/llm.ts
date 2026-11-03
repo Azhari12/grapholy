@@ -16,6 +16,10 @@ export interface StructuredContent {
   rangkuman_narasi: string;
   /** RINGKASAN BAB IV: bullet per proyek (ringkas). */
   ringkasan_penutup: string[];
+  /** Status AI: true = AI dipakai, false = fallback (AI gagal/tidak aktif). */
+  _aiUsed?: boolean;
+  /** Pesan error AI kalau fallback. */
+  _aiError?: string;
 }
 
 const STRUCTURED_PROMPT = `Anda adalah asisten penyusun laporan bulanan formal Bahasa Indonesia untuk laporan pengembangan sistem. Tugas: buat konten laporan dari daftar commit Git berikut, return HANYA JSON valid (tanpa markdown code fence, tanpa penjelasan).
@@ -58,7 +62,7 @@ export async function generateStructuredContent(
 ): Promise<StructuredContent> {
   const cfg = loadAIConfig();
   if (!cfg.apiKey && !cfg.baseURL) {
-    return fallbackContent(groupedCommits, periodeLabel);
+    return { ...fallbackContent(groupedCommits, periodeLabel), _aiUsed: false, _aiError: "API key / baseURL kosong di AI Settings" };
   }
 
   // Build subjects text: per group, list commit subjects
@@ -94,24 +98,38 @@ export async function generateStructuredContent(
     }
   }
 
-  try {
-    const text =
-      cfg.format === "anthropic"
-        ? await callAnthropic(cfg, fullPrompt)
-        : await callOpenAI(cfg, fullPrompt);
-    return parseStructuredJson(text, groupedCommits, periodeLabel);
-  } catch (e) {
-    console.warn(`[llm] structured call failed: ${(e as Error).message}, using fallback`);
-    return fallbackContent(groupedCommits, periodeLabel);
+  const callAI = () =>
+    cfg.format === "anthropic"
+      ? callAnthropic(cfg, fullPrompt)
+      : callOpenAI(cfg, fullPrompt);
+
+  // Retry: kalau AI return JSON rusak (model kadang output invalid), coba lagi
+  // dengan prompt penegas. Maks 3 percobaan.
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const text = await callAI();
+      const parsed = parseStructuredJson(text);
+      return { ...parsed, _aiUsed: true };
+    } catch (e) {
+      lastErr = e;
+      const msg = (e as Error).message;
+      if (msg.includes("JSON") && attempt < 2) {
+        console.warn(`[llm] JSON rusak (attempt ${attempt + 1}), retry…`);
+        continue;
+      }
+      break;
+    }
   }
+  const errMsg = (lastErr as Error)?.message ?? "unknown";
+  console.warn(`[llm] structured call failed: ${errMsg}, using fallback`);
+  return { ...fallbackContent(groupedCommits, periodeLabel), _aiUsed: false, _aiError: errMsg };
 }
 
-/** Parse JSON dari response AI. Handle markdown fence & text sebelum/sesudah JSON. */
-function parseStructuredJson(
-  text: string,
-  groupedCommits: Map<string, string[]>,
-  periodeLabel: string
-): StructuredContent {
+/** Parse JSON dari response AI. Handle markdown fence & text sebelum/sesudah JSON.
+ * Throw kalau JSON invalid — caller yang tangkap & pakai fallback (jangan diam-diam
+ * return fallback agar status AI akurat). */
+function parseStructuredJson(text: string): StructuredContent {
   let cleaned = text.trim();
   // strip markdown code fence ```json ... ```
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -123,24 +141,23 @@ function parseStructuredJson(
   if (jsonMatch) {
     cleaned = jsonMatch[0];
   }
-  try {
-    const parsed = JSON.parse(cleaned) as Partial<StructuredContent>;
-    return {
-      latar_belakang: parsed.latar_belakang ?? "",
-      ruang_lingkup: Array.isArray(parsed.ruang_lingkup) ? parsed.ruang_lingkup : [],
-      ringkasan_per_project: Array.isArray(parsed.ringkasan_per_project)
-        ? parsed.ringkasan_per_project
-        : [],
-      aktivitas: Array.isArray(parsed.aktivitas) ? parsed.aktivitas : [],
-      rangkuman_narasi: parsed.rangkuman_narasi ?? "",
-      ringkasan_penutup: Array.isArray(parsed.ringkasan_penutup)
-        ? parsed.ringkasan_penutup
-        : [],
-    };
-  } catch (e) {
-    console.warn(`[llm] JSON parse failed: ${(e as Error).message}, using fallback`);
-    return fallbackContent(groupedCommits, periodeLabel);
+  const parsed = JSON.parse(cleaned) as Partial<StructuredContent>;
+  // validasi minimal: harus ada aktivitas & latar_belakang
+  if (!Array.isArray(parsed.aktivitas) || !parsed.latar_belakang) {
+    throw new Error("JSON AI tidak lengkap (aktivitas/latar_belakang kosong)");
   }
+  return {
+    latar_belakang: parsed.latar_belakang ?? "",
+    ruang_lingkup: Array.isArray(parsed.ruang_lingkup) ? parsed.ruang_lingkup : [],
+    ringkasan_per_project: Array.isArray(parsed.ringkasan_per_project)
+      ? parsed.ringkasan_per_project
+      : [],
+    aktivitas: parsed.aktivitas,
+    rangkuman_narasi: parsed.rangkuman_narasi ?? "",
+    ringkasan_penutup: Array.isArray(parsed.ringkasan_penutup)
+      ? parsed.ringkasan_penutup
+      : [],
+  };
 }
 
 /** Fallback: struktur minimal dari subject list (tanpa AI). */
@@ -199,7 +216,7 @@ export async function summarizeCommits(
 
 async function callOpenAI(cfg: Awaited<ReturnType<typeof loadAIConfig>>, prompt: string): Promise<string> {
   const url = `${cfg.baseURL.replace(/\/$/, "")}/chat/completions`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -208,7 +225,7 @@ async function callOpenAI(cfg: Awaited<ReturnType<typeof loadAIConfig>>, prompt:
     body: JSON.stringify({
       model: cfg.model,
       temperature: cfg.temperature,
-      max_tokens: 2000,
+      // tanpa max_tokens — pakai default provider (tidak dipotong)
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -222,9 +239,30 @@ async function callOpenAI(cfg: Awaited<ReturnType<typeof loadAIConfig>>, prompt:
   return data.choices?.[0]?.message?.content ?? "";
 }
 
+/** fetch dengan retry 2x & timeout 90 detik. Proxy lokal kadang belum siap
+ * saat request pertama (ECONNREFUSED) — retry mengatasinya. */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  retries = 2
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(90_000) });
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 async function callAnthropic(cfg: Awaited<ReturnType<typeof loadAIConfig>>, prompt: string): Promise<string> {
   const url = `${cfg.baseURL.replace(/\/$/, "")}/v1/messages`;
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -234,7 +272,8 @@ async function callAnthropic(cfg: Awaited<ReturnType<typeof loadAIConfig>>, prom
     body: JSON.stringify({
       model: cfg.model,
       temperature: cfg.temperature,
-      max_tokens: 2000,
+      // Anthropic API WAJIB max_tokens — pakai batas besar (bukan limit rendah)
+      max_tokens: 16384,
       messages: [{ role: "user", content: prompt }],
     }),
   });

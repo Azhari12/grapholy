@@ -64,6 +64,8 @@ function fallbackStructured(
     ),
     ringkasan_penutup: projects.map((p) => `${p}: kegiatan pengembangan periode ${periodeLabel}.`),
     rangkuman_narasi: `Pada bulan ${periodeLabel}, telah dilaksanakan kegiatan pengembangan sistem informasi pada proyek ${projects.join(", ")}.`,
+    _aiUsed: false,
+    _aiError: "summarizeWithLLM=false",
   };
 }
 
@@ -110,14 +112,18 @@ router.post("/generate", async (req, res) => {
   const penanda = penandaOverride ?? loadPenanda();
   const groups = profile?.keyword_groups ?? [];
 
-  // 1. fetch + group per repo
+  // 1. fetch + group per repo (SEMUA branch user, bukan cuma default)
+  const author = await github.getAuthenticatedUser();
   const groupedByRepo = new Map<string, Map<string, CommitItem[]>>();
   for (const repoId of repoIds) {
     const repo = profile?.repos.find((r) => `${r.owner}/${r.name}` === repoId || r.project_key === repoId)
       // juga support repo dari list active (tidak ada di profile YAML)
       ?? { owner: repoId.split("/")[0], name: repoId.split("/")[1], label: repoId.split("/")[1], category: repoId.split("/")[0], project_key: repoId };
     try {
-      const commits = await github.fetchCommits({ since: range.since, until: range.until }, repo);
+      // pakai search/commits: dapat commit user di SEMUA branch
+      const commits = author
+        ? await github.fetchUserCommitsAllBranches({ since: range.since, until: range.until }, repo, author)
+        : await github.fetchCommits({ since: range.since, until: range.until }, repo);
       groupedByRepo.set(repo.label, groupByKeyword(commits, repo, groups));
     } catch (e) {
       console.warn(`[generate] fetch failed for ${repo.label}: ${(e as Error).message}`);
@@ -174,6 +180,11 @@ router.post("/generate", async (req, res) => {
       });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
       res.setHeader("Content-Disposition", 'attachment; filename="laporan.docx"');
+      // Beri tahu FE apakah AI dipakai atau fallback (agar UI bisa warning)
+      res.setHeader("X-AI-Status", content._aiUsed ? "ai" : "fallback");
+      if (content._aiError) {
+        res.setHeader("X-AI-Error", encodeURIComponent(content._aiError.slice(0, 150)));
+      }
       res.send(docx);
     } else {
       // Mode default (template lama): summarize per group

@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { PenandaForm } from "../components/PenandaForm";
 import { PeriodePicker } from "../components/PeriodePicker";
 import { RepoSelector } from "../components/RepoSelector";
 import { PreviewCommit } from "../components/PreviewCommit";
-import { AISettings } from "../components/AISettings";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
-import { fetchActiveRepos, fetchPenanda, fetchAIConfig, previewCommits, generateLaporan } from "../api/client";
-import type { Penanda, Periode, GenerateRequest, AIConfig, ActiveRepo } from "../api/types";
-import { FileText, Search, Loader2, Sparkles } from "lucide-react";
+import { fetchActiveRepos, fetchPenanda, previewCommits, generateLaporan } from "../api/client";
+import type { Penanda, Periode, GenerateRequest, ActiveRepo } from "../api/types";
+import { FileText, Search, Loader2, Sparkles, Settings as SettingsIcon } from "lucide-react";
 
 const TAHUN_NOW = new Date().getFullYear();
 const BULAN_NOW = new Date().getMonth() + 1;
 
-export function HomePage() {
+interface Props {
+  onOpenSettings: () => void;
+}
+
+export function HomePage({ onOpenSettings }: Props) {
   const [penanda, setPenanda] = useState<Penanda | null>(null);
-  const [aiConfig, setAIConfig] = useState<AIConfig | null>(null);
   const [periode, setPeriode] = useState<Periode>({
     mode: "bulan",
     bulan: BULAN_NOW,
@@ -27,11 +28,9 @@ export function HomePage() {
   const [template, setTemplate] = useState<"default" | "rsud">("default");
 
   const penandaQ = useQuery({ queryKey: ["penanda"], queryFn: fetchPenanda });
-  const aiQ = useQuery({ queryKey: ["aiConfig"], queryFn: fetchAIConfig });
 
   // sinkron state saat fetch selesai
   if (penandaQ.data && !penanda) setPenanda(penandaQ.data);
-  if (aiQ.data && !aiConfig) setAIConfig(aiQ.data);
 
   // auto-fetch repo aktif saat bulan/tahun berubah (hanya mode "bulan")
   const activeQ = useQuery({
@@ -57,13 +56,14 @@ export function HomePage() {
 
   const generateM = useMutation({
     mutationFn: async (req: GenerateRequest) => {
-      const blob = await generateLaporan(req);
+      const { blob, aiStatus, aiError } = await generateLaporan(req);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "laporan.docx";
       a.click();
       URL.revokeObjectURL(url);
+      return { aiStatus, aiError };
     },
   });
 
@@ -93,16 +93,18 @@ export function HomePage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 pb-12">
-      <header className="space-y-1 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight">Grapholy</h1>
-        <p className="text-sm text-muted-foreground">
-          Pembuat laporan otomatis dari aktivitas Git
-        </p>
+      <header className="flex items-start justify-between pb-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">Grapholy</h1>
+          <p className="text-sm text-muted-foreground">
+            Pembuat laporan otomatis dari aktivitas Git
+          </p>
+        </div>
+        <Button variant="secondary" onClick={onOpenSettings} className="gap-2">
+          <SettingsIcon className="h-4 w-4" />
+          Settings
+        </Button>
       </header>
-
-      {penanda && <PenandaForm penanda={penanda} onChange={setPenanda} />}
-
-      {aiConfig && <AISettings config={aiConfig} onChange={setAIConfig} />}
 
       <PeriodePicker periode={periode} onChange={setPeriode} tahunNow={TAHUN_NOW} />
 
@@ -172,9 +174,21 @@ export function HomePage() {
         </div>
       )}
       {generateM.isSuccess && (
-        <div className="rounded-md border border-accent bg-accent/10 p-3 text-sm text-accent">
-          ✅ Laporan .docx berhasil didownload
-        </div>
+        <>
+          {generateM.data?.aiStatus === "fallback" ? (
+            <div className="rounded-md border border-yellow-600 bg-yellow-500/10 p-3 text-sm text-yellow-500">
+              ⚠ Laporan didownload, tapi <b>AI gagal dipakai</b> — konten memakai fallback generik.
+              {generateM.data.aiError && (
+                <div className="mt-1 font-mono text-xs opacity-80">Error: {generateM.data.aiError}</div>
+              )}
+              <div className="mt-1">Cek: proxy/API AI hidup? Test koneksi di Settings → AI / LLM.</div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-accent bg-accent/10 p-3 text-sm text-accent">
+              ✅ Laporan .docx berhasil didownload (AI aktif)
+            </div>
+          )}
+        </>
       )}
 
       <PreviewCommit

@@ -17,7 +17,8 @@ router.get("/", (_req, res) => {
   });
 });
 
-// GET /api/repos/active?bulan=&tahun= — scan semua repo PAT, filter yang ada aktivitas di periode
+// GET /api/repos/active?bulan=&tahun= — search SEMUA commit user di SEMUA repo
+// & SEMUA branch, return repo yang ada commit user di periode itu.
 router.get("/active", async (req, res) => {
   const q = z
     .object({
@@ -34,34 +35,33 @@ router.get("/active", async (req, res) => {
   const periode: Periode = { since: start.toISOString(), until: end.toISOString() };
 
   try {
-    const allRepos = await github.listAccessibleRepos();
-    // cek commit per repo, filter yang count > 0, batasi konkurensi 5
+    // Ambil username dari PAT — filter hanya commit user sendiri
+    const author = await github.getAuthenticatedUser();
+    if (!author) {
+      return res.status(401).json({ error: "no_auth", detail: "PAT tidak valid atau kosong" });
+    }
+    // Satu API call: search semua commit user di semua repo & branch
+    const repoCounts = await github.searchUserCommits(periode, author);
+    // build list repo aktif
     const active: Array<{ id: string; owner: string; name: string; label: string; category: string; commitCount: number }> = [];
-    const concurrency = 5;
-    for (let i = 0; i < allRepos.length; i += concurrency) {
-      const batch = allRepos.slice(i, i + concurrency);
-      const results = await Promise.all(
-        batch.map(async (r) => {
-          const count = await github.countCommits(periode, r);
-          return { r, count };
-        })
-      );
-      for (const { r, count } of results) {
-        if (count > 0) {
-          active.push({
-            id: `${r.owner}/${r.name}`,
-            owner: r.owner,
-            name: r.name,
-            label: r.label,
-            category: r.category,
-            commitCount: count,
-          });
-        }
-      }
+    for (const [fullName, count] of repoCounts.entries()) {
+      const [owner, name] = fullName.split("/");
+      active.push({
+        id: fullName,
+        owner,
+        name,
+        label: name,
+        category: owner,
+        commitCount: count,
+      });
     }
     // urut: commit terbanyak dulu
     active.sort((a, b) => b.commitCount - a.commitCount);
-    res.json({ periode: `${start.toLocaleString("id-ID", { month: "long", timeZone: "UTC" })} ${tahun}`, repos: active });
+    res.json({
+      periode: `${start.toLocaleString("id-ID", { month: "long", timeZone: "UTC" })} ${tahun}`,
+      author,
+      repos: active,
+    });
   } catch (e) {
     res.status(500).json({ error: "fetch_failed", detail: (e as Error).message });
   }

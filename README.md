@@ -52,28 +52,39 @@ cp .env.example .env
 # isi GITHUB_PAT, PROXY_TOKEN, dll di .env
 ```
 
-### 2. Jalankan tiap service (3 terminal)
+### 2. Install dependency (sekali)
 ```bash
-# Terminal 1 — Python docgen
+# Python docgen
 cd apps/docgen
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cd src && uvicorn main:app --reload --port 8787
+cd ../..
 
-# Terminal 2 — Express API
-cd apps/api
+# Node (root + api + web)
 npm install
-npm run dev
+npm run install:all
+```
 
-# Terminal 3 — React web
-cd apps/web
-npm install
+### 3. Jalankan semua service — satu command
+```bash
 npm run dev
 ```
 
+Jalankan **docgen + api + web sekaligus** dari root. Ctrl+C sekali mematikan semua.
 Buka http://localhost:5174.
 
-Atau buka `grapholy.code-workspace` di VS Code → jalankan task via Command Palette.
+<details>
+<summary>Cara lama: jalankan per service (3 terminal)</summary>
+
+```bash
+# Terminal 1 — Python docgen
+cd apps/docgen && .venv/Scripts/python.exe -m uvicorn main:app --port 8787 --app-dir src --reload
+# Terminal 2 — Express API
+cd apps/api && npm run dev
+# Terminal 3 — React web
+cd apps/web && npm run dev
+```
+</details>
 
 ## Profile (contoh)
 

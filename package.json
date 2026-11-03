@@ -1,0 +1,16 @@
+{
+  "name": "grapholy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Grapholy — pembuat laporan otomatis dari aktivitas Git",
+  "scripts": {
+    "dev": "concurrently -n docgen,api,web -c magenta,cyan,green \"npm:dev:docgen\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:docgen": "apps\\docgen\\run.cmd",
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "install:all": "cd apps/api && npm install && cd ../web && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
