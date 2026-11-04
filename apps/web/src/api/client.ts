@@ -64,6 +64,22 @@ export async function testGithubPat(): Promise<GithubTestResult> {
   return jsonFetch("/config/github/test", { method: "POST" });
 }
 
+export interface ServiceStatus {
+  ok: boolean;
+  detail: string;
+  url: string;
+}
+
+export interface HealthServices {
+  api: ServiceStatus;
+  docgen: ServiceStatus;
+  aiProxy: ServiceStatus;
+}
+
+export async function fetchHealthServices(): Promise<HealthServices> {
+  return jsonFetch("/health/services");
+}
+
 export interface AITestResult {
   ok: boolean;
   provider: string;

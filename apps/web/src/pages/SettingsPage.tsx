@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPenanda, fetchAIConfig } from "../api/client";
+import { fetchPenanda, fetchAIConfig, fetchHealthServices } from "../api/client";
 import type { Penanda, AIConfig } from "../api/types";
 import { GithubSettings } from "../components/GithubSettings";
 import { AISettings } from "../components/AISettings";
 import { PenandaForm } from "../components/PenandaForm";
+import { Card, CardContent } from "../components/ui/Card";
 import { cn } from "../lib/utils";
-import { KeyRound, Sparkles, UserCircle, Settings as SettingsIcon, ArrowLeft } from "lucide-react";
+import { KeyRound, Sparkles, UserCircle, Settings as SettingsIcon, ArrowLeft, CheckCircle2, XCircle, RefreshCw } from "lucide-react";
 
 type Tab = "github" | "ai" | "penanda";
 
@@ -19,6 +20,35 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof KeyRound }> = [
   { id: "ai", label: "AI / LLM", icon: Sparkles },
   { id: "penanda", label: "Penanda", icon: UserCircle },
 ];
+
+function ServiceStatusBar() {
+  const q = useQuery({ queryKey: ["healthServices"], queryFn: fetchHealthServices, refetchInterval: 15_000 });
+  const items = q.data
+    ? [
+        { name: "API", ...q.data.api },
+        { name: "Docgen (8787)", ...q.data.docgen },
+        { name: "AI Proxy", ...q.data.aiProxy },
+      ]
+    : [];
+  return (
+    <Card>
+      <CardContent className="flex flex-wrap items-center gap-3 p-3 text-xs">
+        <span className="font-medium text-muted-foreground">Status service:</span>
+        {q.isLoading && <span className="text-muted-foreground">memeriksa…</span>}
+        {items.map((it) => (
+          <span key={it.name} className="flex items-center gap-1">
+            {it.ok ? <CheckCircle2 className="h-3.5 w-3.5 text-accent" /> : <XCircle className="h-3.5 w-3.5 text-destructive" />}
+            <span className={it.ok ? "text-foreground" : "text-destructive"}>{it.name}</span>
+            {!it.ok && <span className="font-mono text-[10px] text-muted-foreground">({it.detail})</span>}
+          </span>
+        ))}
+        <button onClick={() => q.refetch()} className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground">
+          <RefreshCw className={cn("h-3.5 w-3.5", q.isFetching && "animate-spin")} /> cek ulang
+        </button>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function SettingsPage({ onBack }: Props) {
   const [tab, setTab] = useState<Tab>("github");
@@ -49,6 +79,8 @@ export function SettingsPage({ onBack }: Props) {
           <h1 className="text-xl font-bold tracking-tight">Settings</h1>
         </div>
       </header>
+
+      <ServiceStatusBar />
 
       {/* Tab nav */}
       <div className="flex gap-1 border-b border-border">

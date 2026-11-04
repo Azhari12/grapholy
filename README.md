@@ -44,23 +44,16 @@ grapholy/
 
 ## Quick start
 
-### 1. Clone & env
+### 1. Clone
 ```bash
 git clone <repo-url> grapholy
 cd grapholy
-cp .env.example .env
-# isi GITHUB_PAT, PROXY_TOKEN, dll di .env
 ```
 
-### 2. Install dependency (sekali)
-```bash
-# Python docgen
-cd apps/docgen
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cd ../..
+> `.env` **opsional**. Konfigurasi (GitHub PAT, AI/LLM, penanda) diatur dari **halaman Settings di UI**, disimpan di `config/*.local.json`. Kalau mau override via `.env`, salin `.env.example` → `.env`.
 
-# Node (root + api + web)
+### 2. Install dependency Node (sekali)
+```bash
 npm install
 npm run install:all
 ```
@@ -72,6 +65,12 @@ npm run dev
 
 Jalankan **docgen + api + web sekaligus** dari root. Ctrl+C sekali mematikan semua.
 Buka http://localhost:5174.
+
+> **Python docgen auto-setup**: saat pertama kali `npm run dev`, `run.cmd` (Windows) otomatis membuat `.venv` + install dependency Python kalau belum ada. Butuh **Python 3.10+** ter-install & ada di PATH. Untuk Linux/Mac, buat venv manual:
+> ```bash
+> cd apps/docgen && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+> ```
+> Kalau docgen gagal, cek panel **Status service** di Settings (buka `/settings` di app) — akan tampil Docgen (8787) ❌.
 
 <details>
 <summary>Cara lama: jalankan per service (3 terminal)</summary>

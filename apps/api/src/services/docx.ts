@@ -19,11 +19,22 @@ interface GeneratePayload {
 
 /** Panggil Python docgen service via HTTP, return .docx bytes. */
 export async function generateDocx(payload: GeneratePayload): Promise<Buffer> {
-  const res = await fetch(`${env.pythonServiceUrl}/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${env.pythonServiceUrl}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (e) {
+    // docgen service tidak bisa dijangkau (mati / port salah)
+    throw new Error(
+      `Python docgen service tidak bisa dijangkau di ${env.pythonServiceUrl}. ` +
+        `Pastikan service docgen (port 8787) berjalan — cek terminal 'docgen' saat npm run dev. ` +
+        `Detail: ${(e as Error).message}`
+    );
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Docgen service ${res.status}: ${body.slice(0, 200)}`);
