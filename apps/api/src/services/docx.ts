@@ -17,24 +17,43 @@ interface GeneratePayload {
   ringkasan_penutup?: string[];
 }
 
+/** URL kandidat untuk docgen: asli + varian localhost↔127.0.0.1 (atasis
+ * masalah IPv4/IPv6 di Windows — Node fetch "localhost" bisa resolve ke ::1
+ * padahal uvicorn listen di 127.0.0.1). */
+function docgenUrls(path: string): string[] {
+  const base = env.pythonServiceUrl;
+  const candidates = new Set<string>([base]);
+  if (base.includes("localhost")) candidates.add(base.replace("localhost", "127.0.0.1"));
+  else if (base.includes("127.0.0.1")) candidates.add(base.replace("127.0.0.1", "localhost"));
+  return [...candidates].map((b) => `${b.replace(/\/$/, "")}${path}`);
+}
+
+/** Panggil docgen dengan fallback host. Return Response (ok atau tidak). */
+async function callDocgen(path: string, body: unknown, timeoutMs = 60_000): Promise<Response> {
+  const urls = docgenUrls(path);
+  let lastErr: unknown;
+  for (const url of urls) {
+    try {
+      return await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (e) {
+      lastErr = e; // coba URL berikutnya (IPv4/IPv6)
+    }
+  }
+  throw new Error(
+    `Python docgen service tidak bisa dijangkau di ${env.pythonServiceUrl}. ` +
+      `Pastikan service docgen (port 8787) berjalan — cek terminal 'docgen' saat npm run dev. ` +
+      `Detail: ${(lastErr as Error)?.message}`
+  );
+}
+
 /** Panggil Python docgen service via HTTP, return .docx bytes. */
 export async function generateDocx(payload: GeneratePayload): Promise<Buffer> {
-  let res: Response;
-  try {
-    res = await fetch(`${env.pythonServiceUrl}/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(60_000),
-    });
-  } catch (e) {
-    // docgen service tidak bisa dijangkau (mati / port salah)
-    throw new Error(
-      `Python docgen service tidak bisa dijangkau di ${env.pythonServiceUrl}. ` +
-        `Pastikan service docgen (port 8787) berjalan — cek terminal 'docgen' saat npm run dev. ` +
-        `Detail: ${(e as Error).message}`
-    );
-  }
+  const res = await callDocgen("/generate", payload);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Docgen service ${res.status}: ${body.slice(0, 200)}`);
@@ -52,11 +71,7 @@ interface ReferenceDoc {
 
 /** Panggil Python docgen untuk parse dokumen referensi → struktur few-shot untuk AI. */
 export async function parseReferenceDoc(path: string): Promise<ReferenceDoc> {
-  const res = await fetch(`${env.pythonServiceUrl}/parse-reference`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path }),
-  });
+  const res = await callDocgen("/parse-reference", { path });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Docgen parse-reference ${res.status}: ${body.slice(0, 200)}`);

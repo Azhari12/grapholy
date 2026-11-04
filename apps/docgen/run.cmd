@@ -29,6 +29,6 @@ if not exist ".venv\Scripts\python.exe" (
   echo [docgen] Setup selesai.
 )
 
-REM 3. Jalankan uvicorn
-echo [docgen] Menjalankan docgen di http://localhost:8787 ...
-".venv\Scripts\python.exe" -m uvicorn main:app --port 8787 --app-dir src --reload
+REM 3. Jalankan uvicorn — listen 127.0.0.1 eksplisit (hindari ambiguitas IPv6)
+echo [docgen] Menjalankan docgen di http://127.0.0.1:8787 ...
+".venv\Scripts\python.exe" -m uvicorn main:app --host 127.0.0.1 --port 8787 --app-dir src --reload

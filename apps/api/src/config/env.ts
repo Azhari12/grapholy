@@ -16,7 +16,7 @@ function required(key: string, fallback = ""): string {
 export const env = {
   githubPat: required("GITHUB_PAT"),
   apiPort: Number(required("API_PORT", "3001")),
-  pythonServiceUrl: required("PYTHON_SERVICE_URL", "http://localhost:8787"),
+  pythonServiceUrl: required("PYTHON_SERVICE_URL", "http://127.0.0.1:8787"),
 };
 
 export const CONFIG_DIR = path.join(ROOT_DIR, "config") + path.sep;
